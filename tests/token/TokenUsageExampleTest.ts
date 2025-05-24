@@ -9,6 +9,7 @@ import { dedent } from '@unicitylabs/commons/lib/util/StringUtils.js';
 
 import { DirectAddress } from '../../src/address/DirectAddress.js';
 import { ISerializable } from '../../src/ISerializable.js';
+import { BurnPredicate } from '../../src/predicate/BurnPredicate.js';
 import { MaskedPredicate } from '../../src/predicate/MaskedPredicate.js';
 import { PredicateFactory } from '../../src/predicate/PredicateFactory.js';
 import { UnmaskedPredicate } from '../../src/predicate/UnmaskedPredicate.js';
@@ -176,7 +177,7 @@ describe('Transition', function () {
     console.log(JSON.stringify(updateToken.toDto()));
   }, 15000);
 
-  it('should verify MaskedPredicate and UnmaskedPredicate reference calculation', async () => {
+  it('should verify reference calculation for all predicate types', async () => {
     const client = new StateTransitionClient(new TestAggregatorClient(new SparseMerkleTree(HashAlgorithm.SHA256)));
     
     // First, create a token from scratch with our modified MaskedPredicate implementation
@@ -316,6 +317,45 @@ describe('Transition', function () {
     const maskedAddr1 = await DirectAddress.create(maskedPredicate1.reference.imprint);
     const maskedAddr2 = await DirectAddress.create(maskedPredicate2.reference.imprint);
     expect(maskedAddr1.toDto()).toBe(maskedAddr2.toDto());
+    
+    // Test BurnPredicate
+    const burnMsg1 = textEncoder.encode('test burn message');
+    const burnMsg2 = textEncoder.encode('different burn message');
+    
+    // Create burn predicates with same tokenId but different messages
+    const burnPredicate1 = await BurnPredicate.create(tokenId1, tokenType, burnMsg1);
+    const burnPredicate2 = await BurnPredicate.create(tokenId1, tokenType, burnMsg2);
+    
+    // References should be different because they include the msg
+    expect(burnPredicate1.reference.equals(burnPredicate2.reference)).toBe(false);
+    
+    // Create burn predicates with different tokenId but same message
+    const burnPredicate3 = await BurnPredicate.create(tokenId1, tokenType, burnMsg1);
+    const burnPredicate4 = await BurnPredicate.create(tokenId2, tokenType, burnMsg1);
+    
+    // References should be the same (same tokenType and message)
+    expect(burnPredicate3.reference.equals(burnPredicate4.reference)).toBe(true);
+    
+    // Hashes should be different (different tokenId)
+    expect(burnPredicate3.hash.equals(burnPredicate4.hash)).toBe(false);
+    
+    // Addresses should be different for different messages
+    const burnAddr1 = await DirectAddress.create(burnPredicate1.reference.imprint);
+    const burnAddr2 = await DirectAddress.create(burnPredicate2.reference.imprint);
+    expect(burnAddr1.toDto()).not.toBe(burnAddr2.toDto());
+    
+    // Addresses should be same for same message but different tokenId
+    const burnAddr3 = await DirectAddress.create(burnPredicate3.reference.imprint);
+    const burnAddr4 = await DirectAddress.create(burnPredicate4.reference.imprint);
+    expect(burnAddr3.toDto()).toBe(burnAddr4.toDto());
+    
+    // Test serialization and deserialization
+    const burnDto = burnPredicate1.toDto();
+    const burnPredicateRestored = await BurnPredicate.fromDto(tokenId1, tokenType, burnDto);
+    
+    expect(burnPredicateRestored.reference.equals(burnPredicate1.reference)).toBe(true);
+    expect(burnPredicateRestored.hash.equals(burnPredicate1.hash)).toBe(true);
+    expect(HexConverter.encode(burnPredicateRestored.msg)).toBe(HexConverter.encode(burnMsg1));
   }, 15000);
 });
 
