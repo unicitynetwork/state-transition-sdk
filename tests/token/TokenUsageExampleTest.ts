@@ -176,7 +176,7 @@ describe('Transition', function () {
     console.log(JSON.stringify(updateToken.toDto()));
   }, 15000);
 
-  it('should create a token and send it using the new masked predicate reference calculation', async () => {
+  it('should verify MaskedPredicate and UnmaskedPredicate reference calculation', async () => {
     const client = new StateTransitionClient(new TestAggregatorClient(new SparseMerkleTree(HashAlgorithm.SHA256)));
     
     // First, create a token from scratch with our modified MaskedPredicate implementation
@@ -251,6 +251,71 @@ describe('Transition', function () {
     );
 
     console.log(token.toString());
+    
+    // Verify that UnmaskedPredicate reference doesn't depend on tokenId
+    const tokenId1 = TokenId.create(crypto.getRandomValues(new Uint8Array(32)));
+    const tokenId2 = TokenId.create(crypto.getRandomValues(new Uint8Array(32)));
+    const tokenType = TokenType.create(crypto.getRandomValues(new Uint8Array(32)));
+    
+    const signingService = await SigningService.createFromSecret(textEncoder.encode('test-predicate-reference'));
+    const unmaskSalt = crypto.getRandomValues(new Uint8Array(32));
+    
+    // Create two predicates with different tokenIds
+    const unmaskedPredicate1 = await UnmaskedPredicate.create(
+      tokenId1,
+      tokenType,
+      signingService,
+      HashAlgorithm.SHA256,
+      unmaskSalt,
+    );
+    
+    const unmaskedPredicate2 = await UnmaskedPredicate.create(
+      tokenId2,
+      tokenType,
+      signingService,
+      HashAlgorithm.SHA256,
+      unmaskSalt,
+    );
+    
+    // References should be equal (no tokenId is used)
+    expect(unmaskedPredicate1.reference.equals(unmaskedPredicate2.reference)).toBe(true);
+    
+    // Hashes should be different (tokenId is used)
+    expect(unmaskedPredicate1.hash.equals(unmaskedPredicate2.hash)).toBe(false);
+    
+    // Addresses derived from references should be identical
+    const unmaskedAddr1 = await DirectAddress.create(unmaskedPredicate1.reference.imprint);
+    const unmaskedAddr2 = await DirectAddress.create(unmaskedPredicate2.reference.imprint);
+    expect(unmaskedAddr1.toDto()).toBe(unmaskedAddr2.toDto());
+    
+    // Test the same for MaskedPredicate
+    const nonce = crypto.getRandomValues(new Uint8Array(32));
+    const maskedPredicate1 = await MaskedPredicate.create(
+      tokenId1,
+      tokenType,
+      signingService,
+      HashAlgorithm.SHA256,
+      nonce
+    );
+    
+    const maskedPredicate2 = await MaskedPredicate.create(
+      tokenId2,
+      tokenType,
+      signingService,
+      HashAlgorithm.SHA256,
+      nonce
+    );
+    
+    // References should be equal (no tokenId is used)
+    expect(maskedPredicate1.reference.equals(maskedPredicate2.reference)).toBe(true);
+    
+    // Hashes should be different (tokenId is used)
+    expect(maskedPredicate1.hash.equals(maskedPredicate2.hash)).toBe(false);
+    
+    // Addresses derived from references should be identical
+    const maskedAddr1 = await DirectAddress.create(maskedPredicate1.reference.imprint);
+    const maskedAddr2 = await DirectAddress.create(maskedPredicate2.reference.imprint);
+    expect(maskedAddr1.toDto()).toBe(maskedAddr2.toDto());
   }, 15000);
 });
 

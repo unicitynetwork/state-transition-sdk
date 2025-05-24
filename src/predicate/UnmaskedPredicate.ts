@@ -33,9 +33,8 @@ export class UnmaskedPredicate extends DefaultPredicate {
     hashAlgorithm: HashAlgorithm,
     salt: Uint8Array,
   ): Promise<DefaultPredicate> {
-    const reference = await UnmaskedPredicate.calculateReference(
-      tokenId,
-      tokenType,
+    // Calculate reference without using tokenId
+    const baseReference = await UnmaskedPredicate.calculateReference(
       signingService.algorithm,
       signingService.publicKey,
       hashAlgorithm,
@@ -45,7 +44,11 @@ export class UnmaskedPredicate extends DefaultPredicate {
     const saltHash = await new DataHasher(HashAlgorithm.SHA256).update(salt).digest();
     const nonce = await signingService.sign(saltHash.imprint);
 
-    const hash = await UnmaskedPredicate.calculateHash(reference, nonce.bytes);
+    // Calculate the final reference (no tokenId included)
+    const reference = baseReference;
+
+    // Calculate hash with tokenId
+    const hash = await UnmaskedPredicate.calculateHash(reference, tokenId, nonce.bytes);
 
     return new UnmaskedPredicate(
       signingService.publicKey,
@@ -63,23 +66,17 @@ export class UnmaskedPredicate extends DefaultPredicate {
     }
 
     const publicKey = HexConverter.decode(data.publicKey);
-    const reference = await UnmaskedPredicate.calculateReference(
-      tokenId,
-      tokenType,
-      data.algorithm,
-      publicKey,
-      data.hashAlgorithm,
-    );
+    // Calculate reference without using tokenId
+    const reference = await UnmaskedPredicate.calculateReference(data.algorithm, publicKey, data.hashAlgorithm);
 
     const nonce = HexConverter.decode(data.nonce);
-    const hash = await UnmaskedPredicate.calculateHash(reference, nonce);
+    // Calculate hash with tokenId
+    const hash = await UnmaskedPredicate.calculateHash(reference, tokenId, nonce);
 
     return new UnmaskedPredicate(publicKey, data.algorithm, data.hashAlgorithm, nonce, reference, hash);
   }
 
   private static async calculateReference(
-    tokenId: TokenId,
-    tokenType: TokenType,
     algorithm: string,
     publicKey: Uint8Array,
     hashAlgorithm: HashAlgorithm,
@@ -91,15 +88,17 @@ export class UnmaskedPredicate extends DefaultPredicate {
 
     return new DataHasher(HashAlgorithm.SHA256)
       .update(textEncoder.encode(UnmaskedPredicate.TYPE))
-      .update(tokenId.encode())
-      .update(tokenType.encode())
       .update(algorithmHash.imprint)
       .update(hashAlgorithmHash.imprint)
       .update(publicKey)
       .digest();
   }
 
-  private static calculateHash(reference: DataHash, nonce: Uint8Array): Promise<DataHash> {
-    return new DataHasher(HashAlgorithm.SHA256).update(reference.imprint).update(nonce).digest();
+  private static calculateHash(reference: DataHash, tokenId: TokenId, nonce: Uint8Array): Promise<DataHash> {
+    return new DataHasher(HashAlgorithm.SHA256)
+      .update(reference.imprint)
+      .update(tokenId.encode())
+      .update(nonce)
+      .digest();
   }
 }
