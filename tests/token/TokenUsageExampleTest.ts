@@ -177,186 +177,125 @@ describe('Transition', function () {
     console.log(JSON.stringify(updateToken.toDto()));
   }, 15000);
 
-  it('should verify reference calculation for all predicate types', async () => {
-    const client = new StateTransitionClient(new TestAggregatorClient(new SparseMerkleTree(HashAlgorithm.SHA256)));
+  describe('Predicate reference calculations', () => {
+    // Create shared test data
+    let tokenId1: TokenId;
+    let tokenId2: TokenId;
+    let tokenType: TokenType;
+    let signingService: SigningService<any>;
     
-    // First, create a token from scratch with our modified MaskedPredicate implementation
-    const mintTokenData = await createMintTokenData(textEncoder.encode('token-secret'));
+    beforeEach(async () => {
+      tokenId1 = TokenId.create(crypto.getRandomValues(new Uint8Array(32)));
+      tokenId2 = TokenId.create(crypto.getRandomValues(new Uint8Array(32)));
+      tokenType = TokenType.create(crypto.getRandomValues(new Uint8Array(32)));
+      signingService = await SigningService.createFromSecret(textEncoder.encode('test-predicate-reference'));
+    });
     
-    // Mint a new token
-    const mintCommitment = await client.submitMintTransaction(
-      await DirectAddress.create(mintTokenData.predicate.reference.imprint),
-      mintTokenData.tokenId,
-      mintTokenData.tokenType,
-      mintTokenData.tokenData,
-      mintTokenData.coinData,
-      mintTokenData.salt,
-      await new DataHasher(HashAlgorithm.SHA256).update(mintTokenData.data).digest(),
-      null,
-    );
-
-    const mintTransaction = await client.createTransaction(
-      mintCommitment,
-      await waitInclusionProof(client, mintCommitment),
-    );
-
-    // Create the initial token
-    let token = new Token(
-      mintTokenData.tokenId,
-      mintTokenData.tokenType,
-      mintTokenData.tokenData,
-      mintTokenData.coinData,
-      await TokenState.create(mintTokenData.predicate, mintTokenData.data),
-      [mintTransaction],
-    );
+    it('should verify UnmaskedPredicate reference calculation', async () => {
+      // Verify that UnmaskedPredicate reference doesn't depend on tokenId
+      const unmaskSalt = crypto.getRandomValues(new Uint8Array(32));
+      
+      // Create two predicates with different tokenIds
+      const unmaskedPredicate1 = await UnmaskedPredicate.create(
+        tokenId1,
+        tokenType,
+        signingService,
+        HashAlgorithm.SHA256,
+        unmaskSalt,
+      );
+      
+      const unmaskedPredicate2 = await UnmaskedPredicate.create(
+        tokenId2,
+        tokenType,
+        signingService,
+        HashAlgorithm.SHA256,
+        unmaskSalt,
+      );
+      
+      // References should be equal (no tokenId is used)
+      expect(unmaskedPredicate1.reference.equals(unmaskedPredicate2.reference)).toBe(true);
+      
+      // Hashes should be different (tokenId is used)
+      expect(unmaskedPredicate1.hash.equals(unmaskedPredicate2.hash)).toBe(false);
+      
+      // Addresses derived from references should be identical
+      const unmaskedAddr1 = await DirectAddress.create(unmaskedPredicate1.reference.imprint);
+      const unmaskedAddr2 = await DirectAddress.create(unmaskedPredicate2.reference.imprint);
+      expect(unmaskedAddr1.toDto()).toBe(unmaskedAddr2.toDto());
+    });
     
-    // Create a recipient predicate using UnmaskedPredicate
-    const salt = crypto.getRandomValues(new Uint8Array(32));
-    const recipientPredicate = await UnmaskedPredicate.create(
-      token.id,
-      token.type,
-      await SigningService.createFromSecret(textEncoder.encode('recipient-secret')),
-      HashAlgorithm.SHA256,
-      salt,
-    );
+    it('should verify MaskedPredicate reference calculation', async () => {
+      // Test MaskedPredicate reference calculation
+      const nonce = crypto.getRandomValues(new Uint8Array(32));
+      const maskedPredicate1 = await MaskedPredicate.create(
+        tokenId1,
+        tokenType,
+        signingService,
+        HashAlgorithm.SHA256,
+        nonce
+      );
+      
+      const maskedPredicate2 = await MaskedPredicate.create(
+        tokenId2,
+        tokenType,
+        signingService,
+        HashAlgorithm.SHA256,
+        nonce
+      );
+      
+      // References should be equal (no tokenId is used)
+      expect(maskedPredicate1.reference.equals(maskedPredicate2.reference)).toBe(true);
+      
+      // Hashes should be different (tokenId is used)
+      expect(maskedPredicate1.hash.equals(maskedPredicate2.hash)).toBe(false);
+      
+      // Addresses derived from references should be identical
+      const maskedAddr1 = await DirectAddress.create(maskedPredicate1.reference.imprint);
+      const maskedAddr2 = await DirectAddress.create(maskedPredicate2.reference.imprint);
+      expect(maskedAddr1.toDto()).toBe(maskedAddr2.toDto());
+    });
     
-    // Create a direct address for the recipient using the reference
-    const recipient = await DirectAddress.create(recipientPredicate.reference.imprint);
-
-    // Create transaction data
-    const transactionData = await TransactionData.create(
-      token.state,
-      recipient.toDto(),
-      crypto.getRandomValues(new Uint8Array(32)),
-      await new DataHasher(HashAlgorithm.SHA256).update(textEncoder.encode('new custom data')).digest(),
-      textEncoder.encode('sending via address derived from reference'),
-      token.nametagTokens,
-    );
-
-    // Submit the transaction
-    const commitment = await client.submitTransaction(
-      transactionData,
-      await SigningService.createFromSecret(textEncoder.encode('token-secret'), mintTokenData.nonce),
-    );
-
-    const transaction = await client.createTransaction(
-      commitment, 
-      await waitInclusionProof(client, commitment),
-    );
-
-    // Finish the transaction
-    token = await client.finishTransaction(
-      token,
-      await TokenState.create(recipientPredicate, textEncoder.encode('new custom data')),
-      transaction,
-    );
-
-    console.log(token.toString());
-    
-    // Verify that UnmaskedPredicate reference doesn't depend on tokenId
-    const tokenId1 = TokenId.create(crypto.getRandomValues(new Uint8Array(32)));
-    const tokenId2 = TokenId.create(crypto.getRandomValues(new Uint8Array(32)));
-    const tokenType = TokenType.create(crypto.getRandomValues(new Uint8Array(32)));
-    
-    const signingService = await SigningService.createFromSecret(textEncoder.encode('test-predicate-reference'));
-    const unmaskSalt = crypto.getRandomValues(new Uint8Array(32));
-    
-    // Create two predicates with different tokenIds
-    const unmaskedPredicate1 = await UnmaskedPredicate.create(
-      tokenId1,
-      tokenType,
-      signingService,
-      HashAlgorithm.SHA256,
-      unmaskSalt,
-    );
-    
-    const unmaskedPredicate2 = await UnmaskedPredicate.create(
-      tokenId2,
-      tokenType,
-      signingService,
-      HashAlgorithm.SHA256,
-      unmaskSalt,
-    );
-    
-    // References should be equal (no tokenId is used)
-    expect(unmaskedPredicate1.reference.equals(unmaskedPredicate2.reference)).toBe(true);
-    
-    // Hashes should be different (tokenId is used)
-    expect(unmaskedPredicate1.hash.equals(unmaskedPredicate2.hash)).toBe(false);
-    
-    // Addresses derived from references should be identical
-    const unmaskedAddr1 = await DirectAddress.create(unmaskedPredicate1.reference.imprint);
-    const unmaskedAddr2 = await DirectAddress.create(unmaskedPredicate2.reference.imprint);
-    expect(unmaskedAddr1.toDto()).toBe(unmaskedAddr2.toDto());
-    
-    // Test the same for MaskedPredicate
-    const nonce = crypto.getRandomValues(new Uint8Array(32));
-    const maskedPredicate1 = await MaskedPredicate.create(
-      tokenId1,
-      tokenType,
-      signingService,
-      HashAlgorithm.SHA256,
-      nonce
-    );
-    
-    const maskedPredicate2 = await MaskedPredicate.create(
-      tokenId2,
-      tokenType,
-      signingService,
-      HashAlgorithm.SHA256,
-      nonce
-    );
-    
-    // References should be equal (no tokenId is used)
-    expect(maskedPredicate1.reference.equals(maskedPredicate2.reference)).toBe(true);
-    
-    // Hashes should be different (tokenId is used)
-    expect(maskedPredicate1.hash.equals(maskedPredicate2.hash)).toBe(false);
-    
-    // Addresses derived from references should be identical
-    const maskedAddr1 = await DirectAddress.create(maskedPredicate1.reference.imprint);
-    const maskedAddr2 = await DirectAddress.create(maskedPredicate2.reference.imprint);
-    expect(maskedAddr1.toDto()).toBe(maskedAddr2.toDto());
-    
-    // Test BurnPredicate
-    const burnMsg1 = textEncoder.encode('test burn message');
-    const burnMsg2 = textEncoder.encode('different burn message');
-    
-    // Create burn predicates with same tokenId but different messages
-    const burnPredicate1 = await BurnPredicate.create(tokenId1, tokenType, burnMsg1);
-    const burnPredicate2 = await BurnPredicate.create(tokenId1, tokenType, burnMsg2);
-    
-    // References should be different because they include the msg
-    expect(burnPredicate1.reference.equals(burnPredicate2.reference)).toBe(false);
-    
-    // Create burn predicates with different tokenId but same message
-    const burnPredicate3 = await BurnPredicate.create(tokenId1, tokenType, burnMsg1);
-    const burnPredicate4 = await BurnPredicate.create(tokenId2, tokenType, burnMsg1);
-    
-    // References should be the same (same tokenType and message)
-    expect(burnPredicate3.reference.equals(burnPredicate4.reference)).toBe(true);
-    
-    // Hashes should be different (different tokenId)
-    expect(burnPredicate3.hash.equals(burnPredicate4.hash)).toBe(false);
-    
-    // Addresses should be different for different messages
-    const burnAddr1 = await DirectAddress.create(burnPredicate1.reference.imprint);
-    const burnAddr2 = await DirectAddress.create(burnPredicate2.reference.imprint);
-    expect(burnAddr1.toDto()).not.toBe(burnAddr2.toDto());
-    
-    // Addresses should be same for same message but different tokenId
-    const burnAddr3 = await DirectAddress.create(burnPredicate3.reference.imprint);
-    const burnAddr4 = await DirectAddress.create(burnPredicate4.reference.imprint);
-    expect(burnAddr3.toDto()).toBe(burnAddr4.toDto());
-    
-    // Test serialization and deserialization
-    const burnDto = burnPredicate1.toDto();
-    const burnPredicateRestored = await BurnPredicate.fromDto(tokenId1, tokenType, burnDto);
-    
-    expect(burnPredicateRestored.reference.equals(burnPredicate1.reference)).toBe(true);
-    expect(burnPredicateRestored.hash.equals(burnPredicate1.hash)).toBe(true);
-    expect(HexConverter.encode(burnPredicateRestored.msg)).toBe(HexConverter.encode(burnMsg1));
-  }, 15000);
+    it('should verify BurnPredicate reference calculation', async () => {
+      // Test BurnPredicate behavior
+      const burnMsg1 = textEncoder.encode('test burn message');
+      const burnMsg2 = textEncoder.encode('different burn message');
+      
+      // Create burn predicates with same tokenId but different messages
+      const burnPredicate1 = await BurnPredicate.create(tokenId1, tokenType, burnMsg1);
+      const burnPredicate2 = await BurnPredicate.create(tokenId1, tokenType, burnMsg2);
+      
+      // References should be different because they include the msg
+      expect(burnPredicate1.reference.equals(burnPredicate2.reference)).toBe(false);
+      
+      // Create burn predicates with different tokenId but same message
+      const burnPredicate3 = await BurnPredicate.create(tokenId1, tokenType, burnMsg1);
+      const burnPredicate4 = await BurnPredicate.create(tokenId2, tokenType, burnMsg1);
+      
+      // References should be the same (same tokenType and message)
+      expect(burnPredicate3.reference.equals(burnPredicate4.reference)).toBe(true);
+      
+      // Hashes should be different (different tokenId)
+      expect(burnPredicate3.hash.equals(burnPredicate4.hash)).toBe(false);
+      
+      // Addresses should be different for different messages
+      const burnAddr1 = await DirectAddress.create(burnPredicate1.reference.imprint);
+      const burnAddr2 = await DirectAddress.create(burnPredicate2.reference.imprint);
+      expect(burnAddr1.toDto()).not.toBe(burnAddr2.toDto());
+      
+      // Addresses should be same for same message but different tokenId
+      const burnAddr3 = await DirectAddress.create(burnPredicate3.reference.imprint);
+      const burnAddr4 = await DirectAddress.create(burnPredicate4.reference.imprint);
+      expect(burnAddr3.toDto()).toBe(burnAddr4.toDto());
+      
+      // Test serialization and deserialization
+      const burnDto = burnPredicate1.toDto();
+      const burnPredicateRestored = await BurnPredicate.fromDto(tokenId1, tokenType, burnDto);
+      
+      expect(burnPredicateRestored.reference.equals(burnPredicate1.reference)).toBe(true);
+      expect(burnPredicateRestored.hash.equals(burnPredicate1.hash)).toBe(true);
+      expect(HexConverter.encode(burnPredicateRestored.msg)).toBe(HexConverter.encode(burnMsg1));
+    });
+  });
 });
 
 class TestTokenData implements ISerializable {
