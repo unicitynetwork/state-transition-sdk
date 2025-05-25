@@ -65,7 +65,7 @@ export class BurnPredicate implements IPredicate {
     );
   }
 
-  private static calculateReference(tokenType: TokenType, msg: Uint8Array): Promise<DataHash> {
+  public static calculateReference(tokenType: TokenType, msg: Uint8Array): Promise<DataHash> {
     return new DataHasher(HashAlgorithm.SHA256)
       .update(textEncoder.encode(BurnPredicate.TYPE))
       .update(tokenType.encode())

@@ -67,7 +67,7 @@ export class MaskedPredicate extends DefaultPredicate {
     return new MaskedPredicate(publicKey, data.algorithm, data.hashAlgorithm, nonce, reference, hash);
   }
 
-  private static async calculateReference(
+  public static async calculateReference(
     algorithm: string,
     publicKey: Uint8Array,
     hashAlgorithm: HashAlgorithm,
