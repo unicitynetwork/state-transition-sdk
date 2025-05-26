@@ -1,3 +1,4 @@
+import { CborEncoder } from '@unicitylabs/commons/lib/cbor/CborEncoder.js';
 import { DataHash } from '@unicitylabs/commons/lib/hash/DataHash.js';
 import { DataHasher } from '@unicitylabs/commons/lib/hash/DataHasher.js';
 import { HashAlgorithm } from '@unicitylabs/commons/lib/hash/HashAlgorithm.js';
@@ -9,8 +10,6 @@ import { DefaultPredicate } from './DefaultPredicate.js';
 import { PredicateType } from './PredicateType.js';
 import { TokenId } from '../token/TokenId.js';
 import { TokenType } from '../token/TokenType.js';
-
-const textEncoder = new TextEncoder();
 
 export class MaskedPredicate extends DefaultPredicate {
   private static readonly TYPE = PredicateType.MASKED;
@@ -33,7 +32,7 @@ export class MaskedPredicate extends DefaultPredicate {
     hashAlgorithm: HashAlgorithm,
     nonce: Uint8Array,
   ): Promise<DefaultPredicate> {
-    const hash = await MaskedPredicate.calculateHash(
+    const hash = await MaskedPredicate.calculateReference(
       tokenId,
       tokenType,
       signingService.algorithm,
@@ -45,14 +44,14 @@ export class MaskedPredicate extends DefaultPredicate {
     return new MaskedPredicate(signingService.publicKey, signingService.algorithm, hashAlgorithm, nonce, hash, hash);
   }
 
-  public static async fromDto(tokenId: TokenId, tokenType: TokenType, data: unknown): Promise<DefaultPredicate> {
-    if (!DefaultPredicate.isDto(data)) {
+  public static async fromJSON(tokenId: TokenId, tokenType: TokenType, data: unknown): Promise<MaskedPredicate> {
+    if (!DefaultPredicate.isJSON(data)) {
       throw new Error('Invalid one time address predicate dto');
     }
 
     const publicKey = HexConverter.decode(data.publicKey);
     const nonce = HexConverter.decode(data.nonce);
-    const hash = await MaskedPredicate.calculateHash(
+    const hash = await MaskedPredicate.calculateReference(
       tokenId,
       tokenType,
       data.algorithm,
@@ -64,7 +63,7 @@ export class MaskedPredicate extends DefaultPredicate {
     return new MaskedPredicate(publicKey, data.algorithm, data.hashAlgorithm, nonce, hash, hash);
   }
 
-  private static async calculateHash(
+  public static calculateReference(
     tokenId: TokenId,
     tokenType: TokenType,
     algorithm: string,
@@ -72,19 +71,18 @@ export class MaskedPredicate extends DefaultPredicate {
     hashAlgorithm: HashAlgorithm,
     nonce: Uint8Array,
   ): Promise<DataHash> {
-    const algorithmHash = await new DataHasher(HashAlgorithm.SHA256).update(textEncoder.encode(algorithm)).digest();
-    const hashAlgorithmHash = await new DataHasher(HashAlgorithm.SHA256)
-      .update(new Uint8Array([hashAlgorithm & 0xff00, hashAlgorithm & 0xff]))
-      .digest();
-
     return new DataHasher(HashAlgorithm.SHA256)
-      .update(textEncoder.encode(MaskedPredicate.TYPE))
-      .update(tokenId.encode())
-      .update(tokenType.encode())
-      .update(algorithmHash.imprint)
-      .update(hashAlgorithmHash.imprint)
-      .update(publicKey)
-      .update(nonce)
+      .update(
+        CborEncoder.encodeArray([
+          CborEncoder.encodeTextString(MaskedPredicate.TYPE),
+          tokenId.toCBOR(),
+          tokenType.toCBOR(),
+          CborEncoder.encodeTextString(algorithm),
+          CborEncoder.encodeTextString(HashAlgorithm[hashAlgorithm]),
+          CborEncoder.encodeByteString(publicKey),
+          CborEncoder.encodeByteString(nonce),
+        ]),
+      )
       .digest();
   }
 }

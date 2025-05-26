@@ -16,7 +16,7 @@ export class NameTagAddress implements IAddress {
     return AddressScheme.PROXY;
   }
 
-  public toDto(): string {
+  public toJSON(): string {
     return `${this.scheme}://${HexConverter.encode(this._data)}`;
   }
 

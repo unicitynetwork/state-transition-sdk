@@ -1,3 +1,4 @@
 export interface ISerializable {
-  encode(): Uint8Array;
+  toCBOR(): Uint8Array;
+  toJSON(): unknown;
 }

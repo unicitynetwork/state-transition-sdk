@@ -1,3 +1,4 @@
+import { CborEncoder } from '@unicitylabs/commons/lib/cbor/CborEncoder.js';
 import { DataHash } from '@unicitylabs/commons/lib/hash/DataHash.js';
 import { DataHasher } from '@unicitylabs/commons/lib/hash/DataHasher.js';
 import { HashAlgorithm } from '@unicitylabs/commons/lib/hash/HashAlgorithm.js';
@@ -9,8 +10,6 @@ import { DefaultPredicate } from './DefaultPredicate.js';
 import { PredicateType } from './PredicateType.js';
 import { TokenId } from '../token/TokenId.js';
 import { TokenType } from '../token/TokenType.js';
-
-const textEncoder = new TextEncoder();
 
 export class UnmaskedPredicate extends DefaultPredicate {
   private static readonly TYPE = PredicateType.UNMASKED;
@@ -57,9 +56,9 @@ export class UnmaskedPredicate extends DefaultPredicate {
     );
   }
 
-  public static async fromDto(tokenId: TokenId, tokenType: TokenType, data: unknown): Promise<DefaultPredicate> {
-    if (!DefaultPredicate.isDto(data)) {
-      throw new Error('Invalid one time address predicate dto');
+  public static async fromJSON(tokenId: TokenId, tokenType: TokenType, data: unknown): Promise<DefaultPredicate> {
+    if (!DefaultPredicate.isJSON(data)) {
+      throw new Error('Invalid one time address predicate JSON');
     }
 
     const publicKey = HexConverter.decode(data.publicKey);
@@ -77,29 +76,30 @@ export class UnmaskedPredicate extends DefaultPredicate {
     return new UnmaskedPredicate(publicKey, data.algorithm, data.hashAlgorithm, nonce, reference, hash);
   }
 
-  private static async calculateReference(
+  private static calculateReference(
     tokenId: TokenId,
     tokenType: TokenType,
     algorithm: string,
     publicKey: Uint8Array,
     hashAlgorithm: HashAlgorithm,
   ): Promise<DataHash> {
-    const algorithmHash = await new DataHasher(HashAlgorithm.SHA256).update(textEncoder.encode(algorithm)).digest();
-    const hashAlgorithmHash = await new DataHasher(HashAlgorithm.SHA256)
-      .update(new Uint8Array([hashAlgorithm & 0xff00, hashAlgorithm & 0xff]))
-      .digest();
-
     return new DataHasher(HashAlgorithm.SHA256)
-      .update(textEncoder.encode(UnmaskedPredicate.TYPE))
-      .update(tokenId.encode())
-      .update(tokenType.encode())
-      .update(algorithmHash.imprint)
-      .update(hashAlgorithmHash.imprint)
-      .update(publicKey)
+      .update(
+        CborEncoder.encodeArray([
+          CborEncoder.encodeTextString(UnmaskedPredicate.TYPE),
+          tokenId.toCBOR(),
+          tokenType.toCBOR(),
+          CborEncoder.encodeTextString(algorithm),
+          CborEncoder.encodeTextString(HashAlgorithm[hashAlgorithm]),
+          CborEncoder.encodeByteString(publicKey),
+        ]),
+      )
       .digest();
   }
 
   private static calculateHash(reference: DataHash, nonce: Uint8Array): Promise<DataHash> {
-    return new DataHasher(HashAlgorithm.SHA256).update(reference.imprint).update(nonce).digest();
+    return new DataHasher(HashAlgorithm.SHA256)
+      .update(CborEncoder.encodeArray([reference.toCBOR(), CborEncoder.encodeByteString(nonce)]))
+      .digest();
   }
 }

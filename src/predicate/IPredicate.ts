@@ -5,7 +5,7 @@ import { MintTransactionData } from '../transaction/MintTransactionData.js';
 import { Transaction } from '../transaction/Transaction.js';
 import { TransactionData } from '../transaction/TransactionData.js';
 
-export interface IPredicateDto {
+export interface IPredicateJson {
   readonly type: string;
 }
 
@@ -15,5 +15,6 @@ export interface IPredicate {
 
   isOwner(publicKey: Uint8Array): Promise<boolean>;
   verify(transaction: Transaction<MintTransactionData<ISerializable | null> | TransactionData>): Promise<boolean>;
-  toDto(): IPredicateDto;
+  toJSON(): IPredicateJson;
+  toCBOR(): Uint8Array;
 }

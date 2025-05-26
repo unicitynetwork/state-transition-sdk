@@ -1,4 +1,5 @@
 import { RequestId } from '@unicitylabs/commons/lib/api/RequestId.js';
+import { CborEncoder } from '@unicitylabs/commons/lib/cbor/CborEncoder.js';
 import { DataHash } from '@unicitylabs/commons/lib/hash/DataHash.js';
 import { DataHasher } from '@unicitylabs/commons/lib/hash/DataHasher.js';
 import { HashAlgorithm } from '@unicitylabs/commons/lib/hash/HashAlgorithm.js';
@@ -10,14 +11,12 @@ import { TokenCoinData } from '../token/fungible/TokenCoinData.js';
 import { TokenId } from '../token/TokenId.js';
 import { TokenType } from '../token/TokenType.js';
 
-export interface IMintTransactionDataDto {
+export interface IMintTransactionDataJson {
   readonly recipient: string;
   readonly salt: string;
   readonly dataHash: string | null;
-  readonly reason: string | null;
+  readonly reason: unknown | null;
 }
-
-const textEncoder = new TextEncoder();
 
 export class MintTransactionData<R extends ISerializable | null> {
   private constructor(
@@ -50,18 +49,21 @@ export class MintTransactionData<R extends ISerializable | null> {
     dataHash: DataHash | null,
     reason: R,
   ): Promise<MintTransactionData<R>> {
-    const tokenDataHash = await new DataHasher(HashAlgorithm.SHA256).update(tokenData.encode()).digest();
-    // TODO: Do not use empty arrays because those will be just skipped
+    const tokenDataHash = await new DataHasher(HashAlgorithm.SHA256).update(tokenData.toCBOR()).digest();
     return new MintTransactionData(
       await new DataHasher(HashAlgorithm.SHA256)
-        .update(tokenId.encode())
-        .update(tokenType.encode())
-        .update(tokenDataHash.imprint)
-        .update(dataHash?.imprint ?? new Uint8Array())
-        .update(coinData?.encode() ?? new Uint8Array())
-        .update(textEncoder.encode(recipient))
-        .update(salt)
-        .update(reason?.encode() ?? new Uint8Array())
+        .update(
+          CborEncoder.encodeArray([
+            tokenId.toCBOR(),
+            tokenType.toCBOR(),
+            tokenDataHash.toCBOR(),
+            dataHash?.toCBOR() ?? CborEncoder.encodeNull(),
+            coinData?.toCBOR() ?? CborEncoder.encodeNull(),
+            CborEncoder.encodeTextString(recipient),
+            CborEncoder.encodeByteString(salt),
+            reason?.toCBOR() ?? CborEncoder.encodeNull(),
+          ]),
+        )
         .digest(),
       sourceState,
       recipient,
@@ -71,13 +73,22 @@ export class MintTransactionData<R extends ISerializable | null> {
     );
   }
 
-  public toDto(): IMintTransactionDataDto {
+  public toJSON(): IMintTransactionDataJson {
     return {
-      dataHash: this.dataHash?.toDto() ?? null,
-      reason: this.reason ? HexConverter.encode(this.reason.encode()) : null,
+      dataHash: this.dataHash?.toJSON() ?? null,
+      reason: this.reason?.toJSON() ?? null,
       recipient: this.recipient,
       salt: HexConverter.encode(this.salt),
     };
+  }
+
+  public toCBOR(): Uint8Array {
+    return CborEncoder.encodeArray([
+      CborEncoder.encodeTextString(this.recipient),
+      CborEncoder.encodeByteString(this.salt),
+      this.dataHash?.toCBOR() ?? CborEncoder.encodeNull(),
+      this.reason?.toCBOR() ?? CborEncoder.encodeNull(),
+    ]);
   }
 
   public toString(): string {

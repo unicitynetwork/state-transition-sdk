@@ -6,7 +6,6 @@ import { DataHash } from '@unicitylabs/commons/lib/hash/DataHash.js';
 import { SparseMerkleTree } from '@unicitylabs/commons/lib/smt/SparseMerkleTree.js';
 
 import { IAggregatorClient } from '../src/api/IAggregatorClient.js';
-import { IAuthenticator } from '../src/api/IAuthenticator.js';
 import { SubmitCommitmentResponse, SubmitCommitmentStatus } from '../src/api/SubmitCommitmentResponse.js';
 
 export class TestAggregatorClient implements IAggregatorClient {
@@ -17,10 +16,10 @@ export class TestAggregatorClient implements IAggregatorClient {
   public async submitTransaction(
     requestId: RequestId,
     transactionHash: DataHash,
-    authenticator: IAuthenticator,
+    authenticator: Authenticator,
   ): Promise<SubmitCommitmentResponse> {
     const path = requestId.toBigInt();
-    const transaction = await Transaction.create(authenticator as Authenticator, transactionHash);
+    const transaction = await Transaction.create(authenticator, transactionHash);
     this.smt.addLeaf(path, transaction.leafValue.imprint);
     this.requests.set(path, transaction);
 

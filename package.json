@@ -28,7 +28,7 @@
   "license": "ISC",
   "homepage": "https://unicitynetwork.github.io/state-transition-sdk/",
   "dependencies": {
-    "@unicitylabs/commons": "2.4.0-rc.ee9b3a5"
+    "@unicitylabs/commons": "2.4.0-rc.018165a"
   },
   "devDependencies": {
     "@babel/preset-env": "7.27.2",
