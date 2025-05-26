@@ -61,9 +61,7 @@ export class TokenFactory {
       );
 
       // TODO: Move address processing to a separate method
-      const expectedRecipient = await DirectAddress.create(
-        transaction.data.sourceState.unlockPredicate.reference.imprint,
-      );
+      const expectedRecipient = await DirectAddress.create(transaction.data.sourceState.unlockPredicate.reference);
       if (expectedRecipient.toJSON() !== previousTransaction.data.recipient) {
         throw new Error('Recipient address mismatch');
       }
@@ -89,7 +87,7 @@ export class TokenFactory {
       throw new Error('State data is not part of transaction.');
     }
 
-    const expectedRecipient = await DirectAddress.create(state.unlockPredicate.reference.imprint);
+    const expectedRecipient = await DirectAddress.create(state.unlockPredicate.reference);
     if (expectedRecipient.toJSON() !== previousTransaction.data.recipient) {
       throw new Error('Recipient address mismatch');
     }

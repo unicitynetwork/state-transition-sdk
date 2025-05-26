@@ -124,7 +124,7 @@ export class StateTransitionClient {
 
     // TODO: Move address processing to a separate method
     // TODO: Resolve proxy address
-    const expectedAddress = await DirectAddress.create(state.unlockPredicate.reference.imprint);
+    const expectedAddress = await DirectAddress.create(state.unlockPredicate.reference);
     if (expectedAddress.toJSON() !== transaction.data.recipient) {
       throw new Error('Recipient address mismatch');
     }

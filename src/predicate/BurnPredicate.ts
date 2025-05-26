@@ -10,15 +10,15 @@ import { PredicateType } from './PredicateType.js';
 import { TokenId } from '../token/TokenId.js';
 import { TokenType } from '../token/TokenType.js';
 
+const TYPE = PredicateType.BURN;
+
 interface IPredicateJson {
   readonly type: PredicateType;
   readonly nonce: string;
 }
 
 export class BurnPredicate implements IPredicate {
-  private static readonly TYPE = PredicateType.BURN;
-
-  public readonly type: PredicateType = BurnPredicate.TYPE;
+  public readonly type: PredicateType = TYPE;
 
   private constructor(
     public readonly reference: DataHash,
@@ -49,14 +49,14 @@ export class BurnPredicate implements IPredicate {
     return new BurnPredicate(reference, hash, nonce);
   }
 
-  private static isJSON(data: unknown): data is IPredicateJson {
-    return typeof data === 'object' && data !== null && 'nonce' in data && typeof data.nonce === 'string';
+  public static calculateReference(tokenType: TokenType): Promise<DataHash> {
+    return new DataHasher(HashAlgorithm.SHA256)
+      .update(CborEncoder.encodeArray([CborEncoder.encodeTextString(TYPE), tokenType.toCBOR()]))
+      .digest();
   }
 
-  private static calculateReference(tokenType: TokenType): Promise<DataHash> {
-    return new DataHasher(HashAlgorithm.SHA256)
-      .update(CborEncoder.encodeArray([CborEncoder.encodeTextString(BurnPredicate.TYPE), tokenType.toCBOR()]))
-      .digest();
+  private static isJSON(data: unknown): data is IPredicateJson {
+    return typeof data === 'object' && data !== null && 'nonce' in data && typeof data.nonce === 'string';
   }
 
   private static calculateHash(reference: DataHash, tokenId: TokenId, nonce: Uint8Array): Promise<DataHash> {

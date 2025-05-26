@@ -11,9 +11,9 @@ import { PredicateType } from './PredicateType.js';
 import { TokenId } from '../token/TokenId.js';
 import { TokenType } from '../token/TokenType.js';
 
-export class UnmaskedPredicate extends DefaultPredicate {
-  private static readonly TYPE = PredicateType.UNMASKED;
+const TYPE = PredicateType.UNMASKED;
 
+export class UnmaskedPredicate extends DefaultPredicate {
   private constructor(
     publicKey: Uint8Array,
     algorithm: string,
@@ -22,7 +22,7 @@ export class UnmaskedPredicate extends DefaultPredicate {
     reference: DataHash,
     hash: DataHash,
   ) {
-    super(UnmaskedPredicate.TYPE, publicKey, algorithm, hashAlgorithm, nonce, reference, hash);
+    super(TYPE, publicKey, algorithm, hashAlgorithm, nonce, reference, hash);
   }
 
   public static async create(
@@ -31,20 +31,18 @@ export class UnmaskedPredicate extends DefaultPredicate {
     signingService: ISigningService<ISignature>,
     hashAlgorithm: HashAlgorithm,
     salt: Uint8Array,
-  ): Promise<DefaultPredicate> {
+  ): Promise<UnmaskedPredicate> {
     const reference = await UnmaskedPredicate.calculateReference(
-      tokenId,
       tokenType,
       signingService.algorithm,
       signingService.publicKey,
       hashAlgorithm,
     );
 
-    // TODO: Do we hash salt? Verify signed salt?
     const saltHash = await new DataHasher(HashAlgorithm.SHA256).update(salt).digest();
     const nonce = await signingService.sign(saltHash.imprint);
 
-    const hash = await UnmaskedPredicate.calculateHash(reference, nonce.bytes);
+    const hash = await UnmaskedPredicate.calculateHash(reference, tokenId, nonce.bytes);
 
     return new UnmaskedPredicate(
       signingService.publicKey,
@@ -63,7 +61,6 @@ export class UnmaskedPredicate extends DefaultPredicate {
 
     const publicKey = HexConverter.decode(data.publicKey);
     const reference = await UnmaskedPredicate.calculateReference(
-      tokenId,
       tokenType,
       data.algorithm,
       publicKey,
@@ -71,13 +68,12 @@ export class UnmaskedPredicate extends DefaultPredicate {
     );
 
     const nonce = HexConverter.decode(data.nonce);
-    const hash = await UnmaskedPredicate.calculateHash(reference, nonce);
+    const hash = await UnmaskedPredicate.calculateHash(reference, tokenId, nonce);
 
     return new UnmaskedPredicate(publicKey, data.algorithm, data.hashAlgorithm, nonce, reference, hash);
   }
 
-  private static calculateReference(
-    tokenId: TokenId,
+  public static calculateReference(
     tokenType: TokenType,
     algorithm: string,
     publicKey: Uint8Array,
@@ -86,8 +82,7 @@ export class UnmaskedPredicate extends DefaultPredicate {
     return new DataHasher(HashAlgorithm.SHA256)
       .update(
         CborEncoder.encodeArray([
-          CborEncoder.encodeTextString(UnmaskedPredicate.TYPE),
-          tokenId.toCBOR(),
+          CborEncoder.encodeTextString(TYPE),
           tokenType.toCBOR(),
           CborEncoder.encodeTextString(algorithm),
           CborEncoder.encodeTextString(HashAlgorithm[hashAlgorithm]),
@@ -97,9 +92,9 @@ export class UnmaskedPredicate extends DefaultPredicate {
       .digest();
   }
 
-  private static calculateHash(reference: DataHash, nonce: Uint8Array): Promise<DataHash> {
+  private static calculateHash(reference: DataHash, tokenId: TokenId, nonce: Uint8Array): Promise<DataHash> {
     return new DataHasher(HashAlgorithm.SHA256)
-      .update(CborEncoder.encodeArray([reference.toCBOR(), CborEncoder.encodeByteString(nonce)]))
+      .update(CborEncoder.encodeArray([reference.toCBOR(), tokenId.toCBOR(), CborEncoder.encodeByteString(nonce)]))
       .digest();
   }
 }
