@@ -58,7 +58,7 @@ export class UnmaskedPredicate extends DefaultPredicate {
 
   public static async fromJSON(tokenId: TokenId, tokenType: TokenType, data: unknown): Promise<DefaultPredicate> {
     if (!DefaultPredicate.isJSON(data)) {
-      throw new Error('Invalid one time address predicate dto');
+      throw new Error('Invalid one time address predicate json');
     }
 
     const publicKey = HexConverter.decode(data.publicKey);

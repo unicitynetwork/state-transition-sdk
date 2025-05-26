@@ -11,7 +11,7 @@ export class PredicateFactory implements IPredicateFactory {
   public create(tokenId: TokenId, tokenType: TokenType, data: IPredicateJson): Promise<IPredicate> {
     switch (data.type) {
       case PredicateType.BURN:
-        return BurnPredicate.fromJSON(tokenId, tokenType);
+        return BurnPredicate.fromJSON(tokenId, tokenType, data);
       case PredicateType.MASKED:
         return MaskedPredicate.fromJSON(tokenId, tokenType, data);
       case PredicateType.UNMASKED:
