@@ -68,7 +68,7 @@ export class TransactionData {
 
   public toDto(): ITransactionDataDto {
     return {
-      dataHash: this.dataHash?.toDto() ?? null,
+      dataHash: this.dataHash?.toJSON() ?? null,
       message: this._message ? HexConverter.encode(this._message) : null,
       nameTags: this.nameTags.map((token) => token.toDto()),
       recipient: this.recipient,

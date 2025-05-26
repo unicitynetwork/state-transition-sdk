@@ -71,6 +71,10 @@ export abstract class DefaultPredicate implements IPredicate {
     transaction: Transaction<MintTransactionData<ISerializable> | TransactionData>,
   ): Promise<boolean> {
     // Verify if input state and public key are correct.
+    if (!transaction.inclusionProof.authenticator) {
+      return false; // no authenticator
+    }
+    
     if (
       HexConverter.encode(transaction.inclusionProof.authenticator.publicKey) !== HexConverter.encode(this.publicKey) ||
       !transaction.inclusionProof.authenticator.stateHash.equals(transaction.data.sourceState.hash)

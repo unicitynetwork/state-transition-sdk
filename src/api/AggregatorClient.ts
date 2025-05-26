@@ -19,9 +19,9 @@ export class AggregatorClient implements IAggregatorClient {
     authenticator: IAuthenticator,
   ): Promise<SubmitCommitmentResponse> {
     const data = {
-      authenticator: authenticator.toDto(),
-      requestId: requestId.toDto(),
-      transactionHash: transactionHash.toDto(),
+      authenticator: authenticator.toJSON(),
+      requestId: requestId.toJSON(),
+      transactionHash: transactionHash.toJSON(),
     };
 
     await this.transport.request('submit_commitment', data);
@@ -29,12 +29,12 @@ export class AggregatorClient implements IAggregatorClient {
   }
 
   public async getInclusionProof(requestId: RequestId, blockNum?: bigint): Promise<InclusionProof> {
-    const data = { blockNum: blockNum?.toString(), requestId: requestId.toDto() };
-    return InclusionProof.fromDto(await this.transport.request('get_inclusion_proof', data));
+    const data = { blockNum: blockNum?.toString(), requestId: requestId.toJSON() };
+    return InclusionProof.fromJSON(await this.transport.request('get_inclusion_proof', data));
   }
 
   public getNoDeletionProof(requestId: RequestId): Promise<unknown> {
-    const data = { requestId: requestId.toDto() };
+    const data = { requestId: requestId.toJSON() };
     return this.transport.request('get_no_deletion_proof', data);
   }
 }
