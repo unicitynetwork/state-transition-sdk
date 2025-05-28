@@ -226,7 +226,7 @@ describe('Transition', function () {
     ]);
     const mintTokenData = await createMintTokenData(secret, coinData);
     const mintCommitment = await client.submitMintTransaction(
-      await DirectAddress.create(mintTokenData.predicate.reference.imprint),
+      await DirectAddress.create(mintTokenData.predicate.reference),
       mintTokenData.tokenId,
       mintTokenData.tokenType,
       mintTokenData.tokenData,
@@ -293,7 +293,7 @@ describe('Transition', function () {
         }
 
         const mintCommitment = await client.submitMintTransaction(
-          await DirectAddress.create(tokenData.predicate.reference.imprint),
+          await DirectAddress.create(tokenData.predicate.reference),
           tokenData.tokenId,
           tokenData.tokenType,
           tokenData.tokenData,

@@ -144,9 +144,10 @@ export class StateTransitionClient {
     const recipientPredicate = await BurnPredicate.create(
       token.id,
       token.type,
+      crypto.getRandomValues(new Uint8Array(32)),
       new BurnReason(new DataHash(sumTreeHashAlgorithm, await allCoinsTree.getRootHash()))
     );
-    const recipient = await DirectAddress.create(recipientPredicate.reference.imprint);
+    const recipient = await DirectAddress.create(recipientPredicate.reference);
 
     const transactionData = await TransactionData.create(
       token.state,
