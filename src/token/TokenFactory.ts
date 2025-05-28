@@ -117,11 +117,11 @@ export class TokenFactory {
         sourceState,
         transaction.data.recipient,
         HexConverter.decode(transaction.data.salt),
-        transaction.data.dataHash ? DataHash.fromDto(transaction.data.dataHash) : null,
+        transaction.data.dataHash ? DataHash.fromJSON(transaction.data.dataHash) : null,
         // TODO: Parse reason properly
         transaction.data.reason ? this.createMintReason(HexConverter.decode(transaction.data.reason)) : null,
       ),
-      InclusionProof.fromDto(transaction.inclusionProof),
+      InclusionProof.fromJSON(transaction.inclusionProof),
     );
   }
 
@@ -147,11 +147,11 @@ export class TokenFactory {
         ),
         data.recipient,
         HexConverter.decode(data.salt),
-        data.dataHash ? DataHash.fromDto(data.dataHash) : null,
+        data.dataHash ? DataHash.fromJSON(data.dataHash) : null,
         data.message ? HexConverter.decode(data.message) : null,
         [], //await Promise.all(data.nameTags.map((input) => this.importToken(input, NameTagTokenData, predicateFactory))),
       ),
-      InclusionProof.fromDto(inclusionProof),
+      InclusionProof.fromJSON(inclusionProof),
     );
   }
 }

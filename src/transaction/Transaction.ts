@@ -1,5 +1,4 @@
-import type { IInclusionProofDto } from '@unicitylabs/commons/lib/api/InclusionProof.js';
-import { InclusionProof } from '@unicitylabs/commons/lib/api/InclusionProof.js';
+import { InclusionProof, IInclusionProofJson } from '@unicitylabs/commons/lib/api/InclusionProof.js';
 import { DataHasher } from '@unicitylabs/commons/lib/hash/DataHasher.js';
 import { dedent } from '@unicitylabs/commons/lib/util/StringUtils.js';
 
@@ -9,7 +8,7 @@ import { ISerializable } from '../ISerializable.js';
 
 export interface ITransactionDto<T extends ITransactionDataDto | IMintTransactionDataDto> {
   readonly data: T;
-  readonly inclusionProof: IInclusionProofDto;
+  readonly inclusionProof: IInclusionProofJson;
 }
 
 export class Transaction<T extends TransactionData | MintTransactionData<ISerializable | null>> {
@@ -21,7 +20,7 @@ export class Transaction<T extends TransactionData | MintTransactionData<ISerial
   public toDto(): ITransactionDto<ITransactionDataDto | IMintTransactionDataDto> {
     return {
       data: this.data.toDto(),
-      inclusionProof: this.inclusionProof.toDto(),
+      inclusionProof: this.inclusionProof.toJSON(),
     };
   }
 

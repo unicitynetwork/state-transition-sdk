@@ -9,6 +9,7 @@ import { dedent } from '@unicitylabs/commons/lib/util/StringUtils.js';
 
 import { DirectAddress } from '../../src/address/DirectAddress.js';
 import { ISerializable } from '../../src/ISerializable.js';
+import { BurnPredicate } from '../../src/predicate/BurnPredicate.js';
 import { MaskedPredicate } from '../../src/predicate/MaskedPredicate.js';
 import { PredicateFactory } from '../../src/predicate/PredicateFactory.js';
 import { UnmaskedPredicate } from '../../src/predicate/UnmaskedPredicate.js';
@@ -176,52 +177,125 @@ describe('Transition', function () {
     console.log(JSON.stringify(updateToken.toDto()));
   }, 15000);
 
-  it('should import token and be able to send it', async () => {
-    const client = new StateTransitionClient(new TestAggregatorClient(new SparseMerkleTree(HashAlgorithm.SHA256)));
-    const secret = new TextEncoder().encode('tere');
-
-    let token = await new TokenFactory(new PredicateFactory()).create(
-      JSON.parse(
-        '{"coins":"8282784065666538393365313563643239613565626236383363383133333232376531643162383465396435356438613465376463373566396437363265646539333761184a827840376665366664326661373437373736363037336630613735363934313833646533356336333232396362613736363632366135616265393938333239366663351849","data":"55a2039369747e513ec52fc785e4332466e99d7895e8b93ef60b2b7a6c5ebb60","id":"8f051698bc608b4212799af8d4101e4ecdc3c4a79875e26e0f8a96314b742fc0","nametagTokens":[],"state":{"data":"6d7920637573746f6d2064617461","unlockPredicate":{"algorithm":"secp256k1","hashAlgorithm":0,"nonce":"06fd8259729b5ceff83a243cc7004cbb9c7299aac7903109efc3b320df7ea46a","publicKey":"024fd11e5a1601aa0e3b44e3c38378789b4889d3b0edeaa108f5374bbea97c1880","type":"MASKED"}},"transactions":[{"data":{"dataHash":"0000cd798106e367051de52c58c2570654c08457db5ea88372d88c0667ec5ba1ee2b","reason":null,"recipient":"DIRECT://0000e06706e005ae77af03e68337498180d426fd10a0962903bf30778695019cc268a039fa80","salt":"581147be23e6db30675b34e32e8b9f83c42f3dd9438857795a7793d236019ebd"},"inclusionProof":{"authenticator":{"algorithm":"secp256k1","publicKey":"034734c06faabf0fd4678a2385507647f1c5de059c459dfeaf12bad1e4e7777f88","signature":"b719243cd1c20c21a738a06ddf337f38b1ac8b1dbf5686abd8039e75de91d7cc4c127a794067dfc3c8e332fa849ce095056aad25bc6e751b653e32974e0299af01","stateHash":"0000b907450f3aea55a489f89e591191e23be1fa0a3fc8c38593d530bc528449384f"},"merkleTreePath":{"root":"00007c7bd5749a48c5196815ade3bb5b4ba2ad4e552fd1e9f316c08a4b7bbe3df11d","steps":[{"path":"7588583787075137615614200187279234761188054928514090795834318452222291284236768822","value":"0000d8b9d10a3e1b6794fa8731f931105cea60c9b02b944ac260d39eb8703d51d9a1"}]},"transactionHash":"0000ea0d167db407b34e4a0a7f3ef19e84efa62c86a100556783658a4ce7a368ff28"}},{"data":{"dataHash":"0000371dd350eb385a9eb4ccf52c532b9f2fb5b24834ea634f4c27739b604cb08102","message":"6d79206d657373616765","nameTags":[],"recipient":"DIRECT://00005000623ab227763ee71c0e2cee4793b4ed103d07a62b7d3f0b2e40177a1536a34f65756a","salt":"bfdff35cb7cf6bb9e9048e1f39fa07cd6d0fa18af0250dca9119705bda8cf87b","sourceState":{"data":"b6eba5e1ffca19abc1167bf44989d0e007a178bb822f4ee62a617aed29023fac","unlockPredicate":{"algorithm":"secp256k1","hashAlgorithm":0,"nonce":"899567b1fc3b8db30032a1c0a7121ed05fa3e0321c6f5d4371f1cb2b4541e3c0","publicKey":"031a038b3b256cee466ce9a761f04522384aa1d5becb67e0dc2ede717a1e05e0d2","type":"MASKED"}}},"inclusionProof":{"authenticator":{"algorithm":"secp256k1","publicKey":"031a038b3b256cee466ce9a761f04522384aa1d5becb67e0dc2ede717a1e05e0d2","signature":"bfa35d1e5389af7f5fec1b2199582de1a32ad04f8332f3375768092e2bdd895b009bf21748f02dda28b670ee427aaa98f71335c631b5d6afff6b5d3750190cc701","stateHash":"0000721c65078cf73f750004db64b8ac5041d2b5cc221e2c853ce082b3faf4d26638"},"merkleTreePath":{"root":"0000475f90b5296710ec788a8a333f7ac5df9cc7d0965c5b4145c520de3d738a3935","steps":[{"path":"7588569218088438164672559934214159214370139797979814927050276356134513515792040107","sibling":"00002dcec6f7ea94cfe638a188fb92959bb6bf3128507e0eab7412b75186ee27d7b6","value":"00006836b376aa8b668eed4149afb4819c1536080559ab0bf713502e9b8a8a49c893"}]},"transactionHash":"00004a01e29ed90ca54a65c36c5ed1c125d88090c2b2e31fca26647569583182601b"}}],"type":"477e128b5cc280f5f8b957260678cb7d457396ff55e4e6c823d22a70c5e4ea37","version":"2.0"}',
-      ),
-      TestTokenData.decode,
-    );
-
-    const salt = crypto.getRandomValues(new Uint8Array(32));
-    const recipientPredicate = await UnmaskedPredicate.create(
-      token.id,
-      token.type,
-      await SigningService.createFromSecret(textEncoder.encode('nextuser')),
-      HashAlgorithm.SHA256,
-      salt,
-    );
-    const recipient = await DirectAddress.create(recipientPredicate.reference.imprint);
-
-    const transactionData = await TransactionData.create(
-      token.state,
-      recipient.toDto(),
-      crypto.getRandomValues(new Uint8Array(32)),
-      await new DataHasher(HashAlgorithm.SHA256).update(textEncoder.encode('new custom data')).digest(),
-      textEncoder.encode('sending via public address'),
-      token.nametagTokens,
-    );
-
-    const tokenPredicate = token.state.unlockPredicate as MaskedPredicate;
-    const commitment = await client.submitTransaction(
-      transactionData,
-      await SigningService.createFromSecret(secret, tokenPredicate.nonce),
-    );
-
-    const transaction = await client.createTransaction(commitment, await client.getInclusionProof(commitment));
-
-    token = await client.finishTransaction(
-      token,
-      await TokenState.create(recipientPredicate, textEncoder.encode('new custom data')),
-      transaction,
-    );
-
-    console.log(token.toString());
-  }, 15000);
+  describe('Predicate reference calculations', () => {
+    // Create shared test data
+    let tokenId1: TokenId;
+    let tokenId2: TokenId;
+    let tokenType: TokenType;
+    let signingService: SigningService<any>;
+    
+    beforeEach(async () => {
+      tokenId1 = TokenId.create(crypto.getRandomValues(new Uint8Array(32)));
+      tokenId2 = TokenId.create(crypto.getRandomValues(new Uint8Array(32)));
+      tokenType = TokenType.create(crypto.getRandomValues(new Uint8Array(32)));
+      signingService = await SigningService.createFromSecret(textEncoder.encode('test-predicate-reference'));
+    });
+    
+    it('should verify UnmaskedPredicate reference calculation', async () => {
+      // Verify that UnmaskedPredicate reference doesn't depend on tokenId
+      const unmaskSalt = crypto.getRandomValues(new Uint8Array(32));
+      
+      // Create two predicates with different tokenIds
+      const unmaskedPredicate1 = await UnmaskedPredicate.create(
+        tokenId1,
+        tokenType,
+        signingService,
+        HashAlgorithm.SHA256,
+        unmaskSalt,
+      );
+      
+      const unmaskedPredicate2 = await UnmaskedPredicate.create(
+        tokenId2,
+        tokenType,
+        signingService,
+        HashAlgorithm.SHA256,
+        unmaskSalt,
+      );
+      
+      // References should be equal (no tokenId is used)
+      expect(unmaskedPredicate1.reference.equals(unmaskedPredicate2.reference)).toBe(true);
+      
+      // Hashes should be different (tokenId is used)
+      expect(unmaskedPredicate1.hash.equals(unmaskedPredicate2.hash)).toBe(false);
+      
+      // Addresses derived from references should be identical
+      const unmaskedAddr1 = await DirectAddress.create(unmaskedPredicate1.reference.imprint);
+      const unmaskedAddr2 = await DirectAddress.create(unmaskedPredicate2.reference.imprint);
+      expect(unmaskedAddr1.toDto()).toBe(unmaskedAddr2.toDto());
+    });
+    
+    it('should verify MaskedPredicate reference calculation', async () => {
+      // Test MaskedPredicate reference calculation
+      const nonce = crypto.getRandomValues(new Uint8Array(32));
+      const maskedPredicate1 = await MaskedPredicate.create(
+        tokenId1,
+        tokenType,
+        signingService,
+        HashAlgorithm.SHA256,
+        nonce
+      );
+      
+      const maskedPredicate2 = await MaskedPredicate.create(
+        tokenId2,
+        tokenType,
+        signingService,
+        HashAlgorithm.SHA256,
+        nonce
+      );
+      
+      // References should be equal (no tokenId is used)
+      expect(maskedPredicate1.reference.equals(maskedPredicate2.reference)).toBe(true);
+      
+      // Hashes should be different (tokenId is used)
+      expect(maskedPredicate1.hash.equals(maskedPredicate2.hash)).toBe(false);
+      
+      // Addresses derived from references should be identical
+      const maskedAddr1 = await DirectAddress.create(maskedPredicate1.reference.imprint);
+      const maskedAddr2 = await DirectAddress.create(maskedPredicate2.reference.imprint);
+      expect(maskedAddr1.toDto()).toBe(maskedAddr2.toDto());
+    });
+    
+    it('should verify BurnPredicate reference calculation', async () => {
+      // Test BurnPredicate behavior
+      const burnMsg1 = textEncoder.encode('test burn message');
+      const burnMsg2 = textEncoder.encode('different burn message');
+      
+      // Create burn predicates with same tokenId but different messages
+      const burnPredicate1 = await BurnPredicate.create(tokenId1, tokenType, burnMsg1);
+      const burnPredicate2 = await BurnPredicate.create(tokenId1, tokenType, burnMsg2);
+      
+      // References should be different because they include the msg
+      expect(burnPredicate1.reference.equals(burnPredicate2.reference)).toBe(false);
+      
+      // Create burn predicates with different tokenId but same message
+      const burnPredicate3 = await BurnPredicate.create(tokenId1, tokenType, burnMsg1);
+      const burnPredicate4 = await BurnPredicate.create(tokenId2, tokenType, burnMsg1);
+      
+      // References should be the same (same tokenType and message)
+      expect(burnPredicate3.reference.equals(burnPredicate4.reference)).toBe(true);
+      
+      // Hashes should be different (different tokenId)
+      expect(burnPredicate3.hash.equals(burnPredicate4.hash)).toBe(false);
+      
+      // Addresses should be different for different messages
+      const burnAddr1 = await DirectAddress.create(burnPredicate1.reference.imprint);
+      const burnAddr2 = await DirectAddress.create(burnPredicate2.reference.imprint);
+      expect(burnAddr1.toDto()).not.toBe(burnAddr2.toDto());
+      
+      // Addresses should be same for same message but different tokenId
+      const burnAddr3 = await DirectAddress.create(burnPredicate3.reference.imprint);
+      const burnAddr4 = await DirectAddress.create(burnPredicate4.reference.imprint);
+      expect(burnAddr3.toDto()).toBe(burnAddr4.toDto());
+      
+      // Test serialization and deserialization
+      const burnDto = burnPredicate1.toDto();
+      const burnPredicateRestored = await BurnPredicate.fromDto(tokenId1, tokenType, burnDto);
+      
+      expect(burnPredicateRestored.reference.equals(burnPredicate1.reference)).toBe(true);
+      expect(burnPredicateRestored.hash.equals(burnPredicate1.hash)).toBe(true);
+      expect(HexConverter.encode(burnPredicateRestored.msg)).toBe(HexConverter.encode(burnMsg1));
+    });
+  });
 });
 
 class TestTokenData implements ISerializable {

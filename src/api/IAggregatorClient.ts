@@ -12,5 +12,7 @@ export interface IAggregatorClient {
     authenticator: IAuthenticator,
   ): Promise<SubmitCommitmentResponse>;
 
-  getInclusionProof(requestId: RequestId): Promise<InclusionProof>;
+  getInclusionProof(requestId: RequestId, blockNum?: bigint): Promise<InclusionProof>;
+  
+  getNoDeletionProof(requestId: RequestId): Promise<unknown>;
 }

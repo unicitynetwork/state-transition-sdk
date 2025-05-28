@@ -73,7 +73,7 @@ export class MintTransactionData<R extends ISerializable | null> {
 
   public toDto(): IMintTransactionDataDto {
     return {
-      dataHash: this.dataHash?.toDto() ?? null,
+      dataHash: this.dataHash?.toJSON() ?? null,
       reason: this.reason ? HexConverter.encode(this.reason.encode()) : null,
       recipient: this.recipient,
       salt: HexConverter.encode(this.salt),

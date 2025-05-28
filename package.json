@@ -1,6 +1,6 @@
 {
   "name": "@unicitylabs/state-transition-sdk",
-  "version": "1.4.1",
+  "version": "1.4.5",
   "description": "Generic State Transition Flow engine for value-carrier agents",
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",
@@ -28,7 +28,7 @@
   "license": "ISC",
   "homepage": "https://unicitynetwork.github.io/state-transition-sdk/",
   "dependencies": {
-    "@unicitylabs/commons": "2.4.0-rc.ee9b3a5"
+    "@unicitylabs/commons": "2.4.0-rc.b25c9a0"
   },
   "devDependencies": {
     "@babel/preset-env": "7.27.2",

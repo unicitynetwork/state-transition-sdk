@@ -1,3 +1,3 @@
 export interface IAuthenticator {
-  toDto(): unknown;
+  toJSON(): unknown;
 }

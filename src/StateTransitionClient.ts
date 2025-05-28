@@ -100,11 +100,19 @@ export class StateTransitionClient {
       throw new Error('Inclusion proof verification failed.');
     }
 
+    if (!inclusionProof.authenticator) {
+      throw new Error('Inclusion proof authenticator is null.');
+    }
+    
     const hashAlgorithm = HashAlgorithm[inclusionProof.authenticator.stateHash.algorithm];
     if (!hashAlgorithm) {
       throw new Error('Invalid inclusion proof hash algorithm.');
     }
 
+    if (!inclusionProof.transactionHash) {
+      throw new Error('Inclusion proof transaction hash is null.');
+    }
+    
     if (!inclusionProof.transactionHash.equals(transactionData.hash)) {
       throw new Error('Payload hash mismatch');
     }
