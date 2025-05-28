@@ -6,10 +6,10 @@ export class NameTagTokenData implements ISerializable {
   }
 
   public toJSON(): string {
-    return '';
+    throw new Error('toJSON method is not implemented.');
   }
 
   public toCBOR(): Uint8Array {
-    return new Uint8Array();
+    throw new Error('toCBOR method is not implemented.');
   }
 }

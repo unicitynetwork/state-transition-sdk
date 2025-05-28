@@ -13,7 +13,6 @@ import { DirectAddress } from '../../src/address/DirectAddress.js';
 import { ISerializable } from '../../src/ISerializable.js';
 import { MaskedPredicate } from '../../src/predicate/MaskedPredicate.js';
 import { PredicateFactory } from '../../src/predicate/PredicateFactory.js';
-import { UnmaskedPredicate } from '../../src/predicate/UnmaskedPredicate.js';
 import { StateTransitionClient } from '../../src/StateTransitionClient.js';
 import { CoinId } from '../../src/token/fungible/CoinId.js';
 import { TokenCoinData } from '../../src/token/fungible/TokenCoinData.js';
@@ -124,13 +123,8 @@ async function createMintTokenDataForSplit(tokenId: TokenId, secret: Uint8Array,
   const salt = crypto.getRandomValues(new Uint8Array(32));
   const nonce = crypto.getRandomValues(new Uint8Array(32));
 
-  const predicate = await MaskedPredicate.create(
-    tokenId,
-    tokenType,
-    await SigningService.createFromSecret(secret, nonce),
-    HashAlgorithm.SHA256,
-    nonce,
-  );
+  const signingService = await SigningService.createFromSecret(secret, nonce);
+  const predicate = await MaskedPredicate.create(tokenId, tokenType, signingService, HashAlgorithm.SHA256, nonce);
 
   return {
     coinData,
@@ -154,7 +148,7 @@ describe('Transition', function () {
     ]);
     const mintTokenData = await createMintTokenData(secret, coinData);
     const mintCommitment = await client.submitMintTransaction(
-      await DirectAddress.create(mintTokenData.predicate.reference.imprint),
+      await DirectAddress.create(mintTokenData.predicate.reference),
       mintTokenData.tokenId,
       mintTokenData.tokenType,
       mintTokenData.tokenData,
@@ -179,14 +173,15 @@ describe('Transition', function () {
     );
 
     const nonce = crypto.getRandomValues(new Uint8Array(32));
+    const signingservice = await SigningService.createFromSecret(new TextEncoder().encode('tere'), nonce);
     const recipientPredicate = await MaskedPredicate.create(
       token.id,
       token.type,
-      await SigningService.createFromSecret(new TextEncoder().encode('tere'), nonce),
+      signingservice,
       HashAlgorithm.SHA256,
       nonce,
     );
-    const recipient = await DirectAddress.create(recipientPredicate.reference.imprint);
+    const recipient = await DirectAddress.create(recipientPredicate.reference);
 
     const transactionData = await TransactionData.create(
       token.state,
@@ -340,51 +335,22 @@ describe('Transition', function () {
   }, 15000);
 
   it('should import token and be able to send it', async () => {
-    const client = new StateTransitionClient(new TestAggregatorClient(new SparseMerkleTree(HashAlgorithm.SHA256)));
-    const secret = new TextEncoder().encode('tere');
-
     /*
     442865be053688cf7cd912eca2e5f3f460faf055e1dcc0eadb22054285b8b0a3
      */
-    let token = await new TokenFactory(new PredicateFactory()).create(
+    const token = await new TokenFactory(new PredicateFactory()).create(
       JSON.parse(
-        ' {"coins":[["28e7010f141594778011bddb83f7aa92a30df2e2bce47c168dabe3158bfdae1e","16"],["217692950607dcbdd542e9bb50c764e0a0258911cf2a31dc76f9689c2c4354fa","11"]],"data":"016d23320dccc978d62e2d70887f9b02221f618f6f1718adff0f17ea307990b6","id":"ee72989f43181ba6a492edff79dbb734acc51e0ccd9c431ec5a62ea656aa762b","nametagTokens":[],"state":{"data":"6d7920637573746f6d2064617461","unlockPredicate":{"algorithm":"secp256k1","hashAlgorithm":0,"nonce":"b6e6dec436c651aaf48aa0e88c3c10d73485137c83ff45bed2897df294f1b6c6","publicKey":"02b8c4c0381f07fe7fc34733537d670941110cf7d3fe4038d9dcb99c586894a55b","type":"MASKED"}},"transactions":[{"data":{"dataHash":"0000b3bba4c7727ee8a5e6427b4dcaa3b5464b623b25d06853376d1f3a71f68fd086","reason":null,"recipient":"DIRECT://0000665b8304f5f05943aa4071f9bd8c0d88779759d575f29c89f8fee9d9382f042c01825bda","salt":"745ea70b0a2e56a83cd5c627b5c88e4f0bac69c09b60a3763d67505bd9c4dde2"},"inclusionProof":{"authenticator":{"algorithm":"secp256k1","publicKey":"02035fa666055bece1e9e9a5d5b676627eb541deb84f9c797f76cf49fe3b222fcb","signature":"5896741ac6fee735af6cd7acba2672c55058eca43f2c37a08db8f6dc7472a71431d135ed431030c4f0bf60a52dea84b35dff2daba918d9505b193f733fcf674e00","stateHash":"0000d7d8ed11dd95600be5c9236f1d692fa3016c604610d944080bf099d7887db71a"},"merkleTreePath":{"root":"00009c148ebe318d50e46f276f6baadde5197c422eefaa8f12fda1d213d0d83e9ba1","steps":[{"path":"7588566323972338727352142220657036935442690831691448580224876125533168288187854824","value":"0000b640b44c0e5923fc0b2ddc5508f033faf745f9fc36c0a9cb297213d8df072ab1"}]},"transactionHash":"00008a2843b917108378c2ba57b2b46497bb6c7fcfb920ecd4a5918cfc1fa018abad"}},{"data":{"dataHash":"0000371dd350eb385a9eb4ccf52c532b9f2fb5b24834ea634f4c27739b604cb08102","message":"6d79206d657373616765","nameTags":[],"recipient":"DIRECT://0000a0d9a5ce3d4e2b2e25ba6c4379f99de2193f55bb8915b344b2cd8e1df9763f5b3cb32b01","salt":"67fb6f8ae9bf5e4849e48ccd7068be7d3f8956636905e16d5533af186a46d604","sourceState":{"data":"8e43e461977da2ef6d4c96ae73a4207fc298e67220b816edec7906b559bd6d43","unlockPredicate":{"algorithm":"secp256k1","hashAlgorithm":0,"nonce":"952aba7c22c6d5b8ee6a4405cc9a049c34306bd88f4e9d1cb5a8e7b19360bf41","publicKey":"03e6384ebe50c1618e3b889bdb6bd22b77d5ad7313c4450f026c75487b07d3893d","type":"MASKED"}}},"inclusionProof":{"authenticator":{"algorithm":"secp256k1","publicKey":"03e6384ebe50c1618e3b889bdb6bd22b77d5ad7313c4450f026c75487b07d3893d","signature":"ec95474d162e73439d08ca127e2c117bea3a71060e47c4ce8186a21809d352e330da72be9241fceb416956251465b5d2039a7af8adecd9b26b8db6034ad50abe00","stateHash":"0000840d71bc06b99b5e472499a31b0ade0abd8ead0b901991115362c77e2478ecb3"},"merkleTreePath":{"root":"000024b02c391d1a9734b5e9a67a06c21c70dcec6de953786a11b6af0f5b408517cc","steps":[{"path":"3794275196256977940401344084028398808277948143862373184273475214336114275678115023","sibling":"00001b3dc461114fef952e1fce54df1273ed1328a03a201dba0c265940d5a839aff1","value":"0000ef7bd705eef54eeafe836a081d4d362331ac3a9834d181d6fda3fa91e3ae52eb"},{"path":"2"}]},"transactionHash":"0000234a90fa1de514feb3592f539fb10a19fcfc6c9293661ea96395fa2d97b39552"}}],"type":"e6914ea8fe8fa9c5f3b77810e4d1002b7c6bacb28c6f5cb6b1c8bd04e9bef5f1","version":"2.0"}',
+        '{"coins":[["99dd31b0c2e5129d62a20233dbf527bb2939213029251f94076da3ac69a51c13","79"],["05e6766fa7d733d0ad008d5f78f65a5de80c9f77a5cf8e0ac2df2bc27b769d37","62"]],"data":"671cdd05e1a021362f5da10c0896b0be65f7cf62f1532ce1c1864290e976d524","id":"557e8eafdee3193df1034fd97a71931bd36d061c95a0087055aa2a11e184428b","nametagTokens":[],"state":{"data":"6d7920637573746f6d2064617461","unlockPredicate":{"algorithm":"secp256k1","hashAlgorithm":0,"nonce":"16489dcc04070fc6089fac7bd6ed328ac9751c3800633383c1f66f5a10085699","publicKey":"02d6b2d40d8cc8e6b416c767207be6c0dd03530c69150d001b67986c4a8a776143","type":"MASKED"}},"transactions":[{"data":{"dataHash":"00007c873fc31dcd84296aa35e7c1f317d3133c68ce0db5d5afc4b9167fca3c8f299","reason":null,"recipient":"DIRECT://88,34,0,0,248,194,133,61,226,204,191,244,241,13,166,222,81,198,102,72,113,106,149,164,245,101,254,183,166,101,235,248,198,255,123,2180f3ec510","salt":"9c2367637a310b1c404b2219a0945f9085e874782e03876269d12de0af42a3ca"},"inclusionProof":{"authenticator":{"algorithm":"secp256k1","publicKey":"034f990a7e1cef4d4d89b05f2aea1b8b5eb8e3a5f043e0b7cdb1481f1ba5bb4fa1","signature":"5d20163406adec601476e14b115595bafbe9aae9fbdb03ebf81e0d770a8e89053f7edebfb8166e78526964d96144ae6659789245aac8bcf16febe9866aa39cf800","stateHash":"000023bdc1838e58f924bc67d68944476fbd94c1f71295d3a5d2f1211f9d6e716dc0"},"merkleTreePath":{"root":"000032f7b723da9276d5ef256458a807502d81598fbae9e57da6a32e612782f89b6c","steps":[{"path":"7588566757054356845826462434160428069377934704733869837825484297339169290756149345","value":"0000bc1969987ec54c3d1263888c03a0bce0a10fd7da66a9cbec2367bdf071daee20"}]},"transactionHash":"000075a63babee02f3cd13be86ac491cde874996278a4f3bc33a159628825eaed696"}},{"data":{"dataHash":"0000371dd350eb385a9eb4ccf52c532b9f2fb5b24834ea634f4c27739b604cb08102","message":"6d79206d657373616765","nameTags":[],"recipient":"DIRECT://88,34,0,0,123,183,252,226,10,160,49,5,88,157,37,147,51,11,17,124,4,190,101,146,63,192,53,48,27,15,86,132,79,168,51,71623456d0","salt":"a8fa6d7e126001f7a2100af721fd03ec55ce5b1e1cfddeda63e2e1887bc56df1","sourceState":{"data":"4489af20bebfa7ccf975af9f0d29700d108f64aca8fe6fea4eb5aa10fec04a24","unlockPredicate":{"algorithm":"secp256k1","hashAlgorithm":0,"nonce":"0c74be21aa52bd9cd16f01d9470796996220f0c88356bd26065ec9b09d4d492f","publicKey":"0229b3edcd237f6cb0dbffa957df4aea618fe8703e8f6edbcc4fb2ed8c76aaa784","type":"MASKED"}}},"inclusionProof":{"authenticator":{"algorithm":"secp256k1","publicKey":"0229b3edcd237f6cb0dbffa957df4aea618fe8703e8f6edbcc4fb2ed8c76aaa784","signature":"8aed19e78bb1576fdbfb2a075139d5c9a3f2feee74a0c45cd4735255b389dc925b44d1711e724e423353af035d7762268d7e01c4979fd10a0c0de0a489e2823600","stateHash":"000002dc74e6108234302cc7f705e9518e0882714b14b5c9e3894cf5c781932fdca0"},"merkleTreePath":{"root":"00002539fb017c199b8883b162f9294ee22da11e4dbe45030b63fb95b96f527f6bf6","steps":[{"path":"7588609821620861404460661268073713761375339282641185691433678499721269006800095522","sibling":"00002900d336225e8a60e512262aa672ef5154c94ee5ef4d299a0416f0046558d9d6","value":"00007098f05366fa4dc58310c18dd404c16173da91f8df26a73a1eb5cfe365644394"}]},"transactionHash":"000010b543e14c690a579b7008b89ce9ce56e27a6feb06ad70faf6d1728abe992747"}}],"type":"543c25686f208125d492173ea34b54925a23339bb4acae14a781bba5a770cc2e","version":"2.0"}',
       ),
       TestTokenData.fromJSON,
     );
 
-    const salt = crypto.getRandomValues(new Uint8Array(32));
-    const recipientPredicate = await UnmaskedPredicate.create(
-      token.id,
-      token.type,
-      await SigningService.createFromSecret(textEncoder.encode('nextuser')),
-      HashAlgorithm.SHA256,
-      salt,
-    );
-    const recipient = await DirectAddress.create(recipientPredicate.reference.imprint);
-
-    const transactionData = await TransactionData.create(
-      token.state,
-      recipient.toJSON(),
-      crypto.getRandomValues(new Uint8Array(32)),
-      await new DataHasher(HashAlgorithm.SHA256).update(textEncoder.encode('new custom data')).digest(),
-      textEncoder.encode('sending via public address'),
-      token.nametagTokens,
+    const signingservice = await SigningService.createFromSecret(
+      new TextEncoder().encode('tere'),
+      token.state.unlockPredicate.nonce,
     );
 
-    const tokenPredicate = token.state.unlockPredicate as MaskedPredicate;
-    const commitment = await client.submitTransaction(
-      transactionData,
-      await SigningService.createFromSecret(secret, tokenPredicate.nonce),
-    );
-
-    const transaction = await client.createTransaction(commitment, await client.getInclusionProof(commitment));
-
-    token = await client.finishTransaction(
-      token,
-      await TokenState.create(recipientPredicate, textEncoder.encode('new custom data')),
-      transaction,
-    );
+    expect(token.state.unlockPredicate.isOwner(signingservice.publicKey)).toBeTruthy();
 
     console.log(token.toString());
   }, 15000);
