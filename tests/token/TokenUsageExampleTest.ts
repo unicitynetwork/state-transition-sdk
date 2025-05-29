@@ -1,4 +1,4 @@
-import { InclusionProof } from '@unicitylabs/commons/lib/api/InclusionProof.js';
+import { InclusionProof, InclusionProofVerificationStatus } from '@unicitylabs/commons/lib/api/InclusionProof.js';
 import { DataHasher } from '@unicitylabs/commons/lib/hash/DataHasher.js';
 import { NodeDataHasher } from '@unicitylabs/commons/lib/hash/NodeDataHasher.js';
 import { DataHasherFactory } from '@unicitylabs/commons/lib/hash/DataHasherFactory.js';
@@ -44,45 +44,51 @@ interface IMintTokenData {
   predicate: MaskedPredicate;
 }
 
-function waitInclusionProof(
+class SleepError extends Error {
+  public constructor(message: string) {
+    super(message);
+    this.name = 'SleepError';
+  }
+}
+
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(resolve, ms);
+    signal.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timeout);
+        reject(signal.reason);
+      },
+      { once: true },
+    );
+  });
+}
+
+async function waitInclusionProof(
   client: StateTransitionClient,
   commitment: Commitment<TransactionData | MintTransactionData<ISerializable | null>>,
   signal: AbortSignal = AbortSignal.timeout(10000),
   interval: number = 1000,
 ): Promise<InclusionProof> {
-  return new Promise((resolve, reject) => {
-    let timeoutId: NodeJS.Timeout | number;
-    const abortListener = (): void => {
-      signal.removeEventListener('abort', abortListener);
-      clearTimeout(timeoutId);
-      reject(signal.reason);
-    };
+  while (true) {
+    try {
+      const inclusionProof = await client.getInclusionProof(commitment);
+      if ((await inclusionProof.verify(commitment.requestId.toBigInt())) === InclusionProofVerificationStatus.OK) {
+        return inclusionProof;
+      }
+    } catch (err) {
+      if (!(err instanceof JsonRpcNetworkError && err.status === 404)) {
+        throw err;
+      }
+    }
 
-    signal.addEventListener('abort', abortListener);
-
-    const fetchProof = (): void => {
-      client
-        .getInclusionProof(commitment)
-        .then((proof) => {
-          if (proof !== null) {
-            signal.removeEventListener('abort', abortListener);
-            clearTimeout(timeoutId);
-            return resolve(proof);
-          }
-
-          timeoutId = setTimeout(fetchProof, interval);
-        })
-        .catch((err) => {
-          if (err instanceof JsonRpcNetworkError && err.status === 404) {
-            timeoutId = setTimeout(fetchProof, interval);
-          } else {
-            throw err;
-          }
-        });
-    };
-
-    fetchProof();
-  });
+    try {
+      await sleep(interval, signal);
+    } catch (err) {
+      throw new SleepError(String(err || 'Sleep was aborted'));
+    }
+  }
 }
 
 async function createMintTokenData(secret: Uint8Array, coinData: TokenCoinData): Promise<IMintTokenData> {
@@ -340,7 +346,7 @@ describe('Transition', function () {
      */
     const token = await new TokenFactory(new PredicateFactory()).create(
       JSON.parse(
-        '{"coins":[["99dd31b0c2e5129d62a20233dbf527bb2939213029251f94076da3ac69a51c13","79"],["05e6766fa7d733d0ad008d5f78f65a5de80c9f77a5cf8e0ac2df2bc27b769d37","62"]],"data":"671cdd05e1a021362f5da10c0896b0be65f7cf62f1532ce1c1864290e976d524","id":"557e8eafdee3193df1034fd97a71931bd36d061c95a0087055aa2a11e184428b","nametagTokens":[],"state":{"data":"6d7920637573746f6d2064617461","unlockPredicate":{"algorithm":"secp256k1","hashAlgorithm":0,"nonce":"16489dcc04070fc6089fac7bd6ed328ac9751c3800633383c1f66f5a10085699","publicKey":"02d6b2d40d8cc8e6b416c767207be6c0dd03530c69150d001b67986c4a8a776143","type":"MASKED"}},"transactions":[{"data":{"dataHash":"00007c873fc31dcd84296aa35e7c1f317d3133c68ce0db5d5afc4b9167fca3c8f299","reason":null,"recipient":"DIRECT://88,34,0,0,248,194,133,61,226,204,191,244,241,13,166,222,81,198,102,72,113,106,149,164,245,101,254,183,166,101,235,248,198,255,123,2180f3ec510","salt":"9c2367637a310b1c404b2219a0945f9085e874782e03876269d12de0af42a3ca"},"inclusionProof":{"authenticator":{"algorithm":"secp256k1","publicKey":"034f990a7e1cef4d4d89b05f2aea1b8b5eb8e3a5f043e0b7cdb1481f1ba5bb4fa1","signature":"5d20163406adec601476e14b115595bafbe9aae9fbdb03ebf81e0d770a8e89053f7edebfb8166e78526964d96144ae6659789245aac8bcf16febe9866aa39cf800","stateHash":"000023bdc1838e58f924bc67d68944476fbd94c1f71295d3a5d2f1211f9d6e716dc0"},"merkleTreePath":{"root":"000032f7b723da9276d5ef256458a807502d81598fbae9e57da6a32e612782f89b6c","steps":[{"path":"7588566757054356845826462434160428069377934704733869837825484297339169290756149345","value":"0000bc1969987ec54c3d1263888c03a0bce0a10fd7da66a9cbec2367bdf071daee20"}]},"transactionHash":"000075a63babee02f3cd13be86ac491cde874996278a4f3bc33a159628825eaed696"}},{"data":{"dataHash":"0000371dd350eb385a9eb4ccf52c532b9f2fb5b24834ea634f4c27739b604cb08102","message":"6d79206d657373616765","nameTags":[],"recipient":"DIRECT://88,34,0,0,123,183,252,226,10,160,49,5,88,157,37,147,51,11,17,124,4,190,101,146,63,192,53,48,27,15,86,132,79,168,51,71623456d0","salt":"a8fa6d7e126001f7a2100af721fd03ec55ce5b1e1cfddeda63e2e1887bc56df1","sourceState":{"data":"4489af20bebfa7ccf975af9f0d29700d108f64aca8fe6fea4eb5aa10fec04a24","unlockPredicate":{"algorithm":"secp256k1","hashAlgorithm":0,"nonce":"0c74be21aa52bd9cd16f01d9470796996220f0c88356bd26065ec9b09d4d492f","publicKey":"0229b3edcd237f6cb0dbffa957df4aea618fe8703e8f6edbcc4fb2ed8c76aaa784","type":"MASKED"}}},"inclusionProof":{"authenticator":{"algorithm":"secp256k1","publicKey":"0229b3edcd237f6cb0dbffa957df4aea618fe8703e8f6edbcc4fb2ed8c76aaa784","signature":"8aed19e78bb1576fdbfb2a075139d5c9a3f2feee74a0c45cd4735255b389dc925b44d1711e724e423353af035d7762268d7e01c4979fd10a0c0de0a489e2823600","stateHash":"000002dc74e6108234302cc7f705e9518e0882714b14b5c9e3894cf5c781932fdca0"},"merkleTreePath":{"root":"00002539fb017c199b8883b162f9294ee22da11e4dbe45030b63fb95b96f527f6bf6","steps":[{"path":"7588609821620861404460661268073713761375339282641185691433678499721269006800095522","sibling":"00002900d336225e8a60e512262aa672ef5154c94ee5ef4d299a0416f0046558d9d6","value":"00007098f05366fa4dc58310c18dd404c16173da91f8df26a73a1eb5cfe365644394"}]},"transactionHash":"000010b543e14c690a579b7008b89ce9ce56e27a6feb06ad70faf6d1728abe992747"}}],"type":"543c25686f208125d492173ea34b54925a23339bb4acae14a781bba5a770cc2e","version":"2.0"}',
+        '{"coins":[["16c9565fdb3a5a3496f04f2c9bf0de09b34f55b2970662a07898fabed317578c","38"],["21ee73434dced941ce83d3dac0c3f9261af74a321d1f8cfeb8d9f8721caa5e73","82"]],"data":"d9ad667e7a347cf14c1502a7ba150c3ccf0d0d4523f67ad526d8ae12902e814e","id":"62dc8146628b9e72828a9566f75b31daad58742618a8c5cc61f2e2be991c83ac","nametagTokens":[],"state":{"data":"6d7920637573746f6d2064617461","unlockPredicate":{"algorithm":"secp256k1","hashAlgorithm":0,"nonce":"b13790687f71346a443f54a6446477c2bc7700ec27eb6bf05a5295a707b5bf3c","publicKey":"02036cf36062511e4bfe7868c06c7611a1d15ba068e25f3518f614585bdae17d07","type":"MASKED"}},"transactions":[{"data":{"dataHash":"0000551aff593ca881abd47ae36c197dc9f394e06ff30e732dcdbdd3ed5ec3d0fe40","reason":null,"recipient":"DIRECT://88,34,0,0,68,167,89,228,116,207,32,101,3,229,157,243,246,183,8,220,102,214,135,36,162,109,72,139,152,236,236,252,100,30,168,103c1e61aa3","salt":"42eb215e685827145ae9e8f0e85acad6f121d1277c87d3386abcf7810dd04d81"},"inclusionProof":{"authenticator":{"algorithm":"secp256k1","publicKey":"02a40e00bb9f120383c34e83108b8f52e40558626311af9c27a2300fe889423a14","signature":"edd1b5ca5a93ad96499683989c09e6f9e8515929d6b2e0ba02e909062e690bf03290cd0290146e38e4aef7981b3a41364baae553980aa79c915a6d73b112375801","stateHash":"0000523980d0ac43090affe60aa5c8d62324e19004016d16766a7871d1ed49d2079b"},"merkleTreePath":{"root":"000038cb9f5b4169eb772777609817f231c44e1dfcf9f7a1db078ccb7ae7aacaae35","steps":[{"branch":["0000c91debe04166f5aae03d4580b31d2a03956a90e9716e33b70290ef5293f2e2ad"],"path":"7588649149295761100161440130452085754533110058562091409936174197616260138218570176","sibling":null}]},"transactionHash":"00001f3dfd815d76580ecdd64e0aeed062bbf6e4a5cbab99c57231d871a0c7e56cd8"}},{"data":{"dataHash":"0000371dd350eb385a9eb4ccf52c532b9f2fb5b24834ea634f4c27739b604cb08102","message":"6d79206d657373616765","nameTags":[],"recipient":"DIRECT://88,34,0,0,255,136,17,146,129,74,57,225,31,50,166,242,99,27,77,73,75,35,163,176,89,245,9,253,188,114,219,159,158,220,233,21bd9a3f67","salt":"669d4f7b0d83de53a8d7e47df4d55eaa497140dd9b22b1bfb05ffa74d7e6b807","sourceState":{"data":"1fa2b7207533884b07ca73f543fe84ff43b9286592616ad1d477b95677583ad4","unlockPredicate":{"algorithm":"secp256k1","hashAlgorithm":0,"nonce":"79d6d660cb0845fe7b2a8508ef9fb992c613b6e3e0d525ba192246ccefd081c1","publicKey":"03087b8dca5315324d737f03f0aafb64e88b3ebd35cba407fb76ef298d31dae3e5","type":"MASKED"}}},"inclusionProof":{"authenticator":{"algorithm":"secp256k1","publicKey":"03087b8dca5315324d737f03f0aafb64e88b3ebd35cba407fb76ef298d31dae3e5","signature":"71772878f316949152beafd099d83ae4ca73ed24359773c2c939ea4a184284aa739e9581d2d8d9ce618bc8d11be5fa7c03f58c801d8f2c500f8545fc4f66bf5301","stateHash":"00004af7ba6d6ff536176b944dbdda79d03dd062a972d76af3a3e17efe624ad9bfe2"},"merkleTreePath":{"root":"0000b84481027c50da30cb7491aaa7b9af8bbaf212fa98ad3e68ab2fdee847e398b9","steps":[{"branch":["0000263a450c27a110e1bf8456c78e2450ab6f630479eefabe0c3769686ee6422e65"],"path":"3794275205504007869408312821825704795923678604410441406998183603722408454352248239","sibling":"00000d8cc593d0cbda705dd65e01361fa880ff018a7133154047c1b48b48edc66e82"},{"branch":[],"path":"2","sibling":null}]},"transactionHash":"0000e4e9d983dd591341a8ba86e27809ba12091265d2af2ccbbcf2783a3997b682b3"}}],"type":"041cedab337d8432e848925ec6a6993915a63d9102093c2c0d5b82fe7efc6492","version":"2.0"}',
       ),
       TestTokenData.fromJSON,
     );

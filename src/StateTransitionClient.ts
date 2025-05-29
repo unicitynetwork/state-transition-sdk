@@ -174,12 +174,11 @@ export class StateTransitionClient {
       throw new Error('Inclusion proof verification failed.');
     }
 
-    const hashAlgorithm = HashAlgorithm[inclusionProof.authenticator.stateHash.algorithm];
-    if (!hashAlgorithm) {
+    if (!inclusionProof.authenticator || !HashAlgorithm[inclusionProof.authenticator.stateHash.algorithm]) {
       throw new Error('Invalid inclusion proof hash algorithm.');
     }
 
-    if (!inclusionProof.transactionHash.equals(transactionData.hash)) {
+    if (!inclusionProof.transactionHash?.equals(transactionData.hash)) {
       throw new Error('Payload hash mismatch');
     }
 
