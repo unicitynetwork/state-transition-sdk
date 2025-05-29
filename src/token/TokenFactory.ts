@@ -157,6 +157,10 @@ export class TokenFactory {
     transaction: Transaction<MintTransactionData<ISerializable | null>>,
     publicKey: Uint8Array,
   ): Promise<boolean> {
+    if (!transaction.inclusionProof.authenticator || !transaction.inclusionProof.transactionHash) {
+      return false;
+    }
+
     if (
       HexConverter.encode(transaction.inclusionProof.authenticator.publicKey) !== HexConverter.encode(publicKey) ||
       !transaction.inclusionProof.authenticator.stateHash.equals(transaction.data.sourceState.hash)

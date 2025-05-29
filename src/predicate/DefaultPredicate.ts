@@ -81,6 +81,10 @@ export abstract class DefaultPredicate implements IPredicate {
   public async verify(
     transaction: Transaction<MintTransactionData<ISerializable> | TransactionData>,
   ): Promise<boolean> {
+    if (!transaction.inclusionProof.authenticator || !transaction.inclusionProof.transactionHash) {
+      return false;
+    }
+
     // Verify if input state and public key are correct.
     if (
       HexConverter.encode(transaction.inclusionProof.authenticator.publicKey) !== HexConverter.encode(this.publicKey) ||
