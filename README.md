@@ -33,6 +33,9 @@ Records that define how a token state changes, including:
 - **Transaction**: Created by sender, contains source state and recipient pointer
 - **Transition**: Resolved by recipient, contains full source and destination states
 
+## Web GUI interface
+[Token GUI stand-alone page](https://unicitynetwork.github.io/state-transition-sdk/)
+
 ## Installation
 
 ```bash
