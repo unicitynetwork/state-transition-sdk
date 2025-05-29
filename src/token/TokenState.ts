@@ -1,13 +1,14 @@
+import { CborEncoder } from '@unicitylabs/commons/lib/cbor/CborEncoder.js';
 import { DataHash } from '@unicitylabs/commons/lib/hash/DataHash.js';
 import { DataHasher } from '@unicitylabs/commons/lib/hash/DataHasher.js';
 import { HashAlgorithm } from '@unicitylabs/commons/lib/hash/HashAlgorithm.js';
 import { HexConverter } from '@unicitylabs/commons/lib/util/HexConverter.js';
 import { dedent } from '@unicitylabs/commons/lib/util/StringUtils.js';
 
-import { IPredicate, IPredicateDto } from '../predicate/IPredicate.js';
+import { IPredicate, IPredicateJson } from '../predicate/IPredicate.js';
 
-export interface ITokenStateDto {
-  readonly unlockPredicate: IPredicateDto;
+export interface ITokenStateJson {
+  readonly unlockPredicate: IPredicateJson;
   readonly data: string | null;
 }
 
@@ -33,17 +34,28 @@ export class TokenState {
       unlockPredicate,
       data,
       await new DataHasher(HashAlgorithm.SHA256)
-        .update(unlockPredicate.hash.imprint)
-        .update(data ?? new Uint8Array())
+        .update(
+          CborEncoder.encodeArray([
+            unlockPredicate.hash.toCBOR(),
+            CborEncoder.encodeOptional(data, CborEncoder.encodeByteString),
+          ]),
+        )
         .digest(),
     );
   }
 
-  public toDto(): ITokenStateDto {
+  public toJSON(): ITokenStateJson {
     return {
       data: this._data ? HexConverter.encode(this._data) : null,
-      unlockPredicate: this.unlockPredicate.toDto(),
+      unlockPredicate: this.unlockPredicate.toJSON(),
     };
+  }
+
+  public toCBOR(): Uint8Array {
+    return CborEncoder.encodeArray([
+      this.unlockPredicate.toCBOR(),
+      CborEncoder.encodeOptional(this._data, CborEncoder.encodeByteString),
+    ]);
   }
 
   public toString(): string {

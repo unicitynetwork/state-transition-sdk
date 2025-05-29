@@ -5,7 +5,11 @@ export class NameTagTokenData implements ISerializable {
     return Promise.resolve(new NameTagTokenData());
   }
 
-  public encode(): Uint8Array {
-    return new Uint8Array();
+  public toJSON(): string {
+    throw new Error('toJSON method is not implemented.');
+  }
+
+  public toCBOR(): Uint8Array {
+    throw new Error('toCBOR method is not implemented.');
   }
 }

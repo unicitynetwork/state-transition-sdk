@@ -1,4 +1,4 @@
-import { InclusionProof } from '@unicitylabs/commons/lib/api/InclusionProof.js';
+import { InclusionProof, InclusionProofVerificationStatus } from '@unicitylabs/commons/lib/api/InclusionProof.js';
 import { DataHasher } from '@unicitylabs/commons/lib/hash/DataHasher.js';
 import { HashAlgorithm } from '@unicitylabs/commons/lib/hash/HashAlgorithm.js';
 import { JsonRpcNetworkError } from '@unicitylabs/commons/lib/json-rpc/JsonRpcNetworkError.js';
@@ -11,7 +11,6 @@ import { DirectAddress } from '../../src/address/DirectAddress.js';
 import { ISerializable } from '../../src/ISerializable.js';
 import { MaskedPredicate } from '../../src/predicate/MaskedPredicate.js';
 import { PredicateFactory } from '../../src/predicate/PredicateFactory.js';
-import { UnmaskedPredicate } from '../../src/predicate/UnmaskedPredicate.js';
 import { StateTransitionClient } from '../../src/StateTransitionClient.js';
 import { CoinId } from '../../src/token/fungible/CoinId.js';
 import { TokenCoinData } from '../../src/token/fungible/TokenCoinData.js';
@@ -38,45 +37,51 @@ interface IMintTokenData {
   predicate: MaskedPredicate;
 }
 
-function waitInclusionProof(
+class SleepError extends Error {
+  public constructor(message: string) {
+    super(message);
+    this.name = 'SleepError';
+  }
+}
+
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(resolve, ms);
+    signal.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timeout);
+        reject(signal.reason);
+      },
+      { once: true },
+    );
+  });
+}
+
+async function waitInclusionProof(
   client: StateTransitionClient,
   commitment: Commitment<TransactionData | MintTransactionData<ISerializable | null>>,
   signal: AbortSignal = AbortSignal.timeout(10000),
   interval: number = 1000,
 ): Promise<InclusionProof> {
-  return new Promise((resolve, reject) => {
-    let timeoutId: NodeJS.Timeout | number;
-    const abortListener = (): void => {
-      signal.removeEventListener('abort', abortListener);
-      clearTimeout(timeoutId);
-      reject(signal.reason);
-    };
+  while (true) {
+    try {
+      const inclusionProof = await client.getInclusionProof(commitment);
+      if ((await inclusionProof.verify(commitment.requestId.toBigInt())) === InclusionProofVerificationStatus.OK) {
+        return inclusionProof;
+      }
+    } catch (err) {
+      if (!(err instanceof JsonRpcNetworkError && err.status === 404)) {
+        throw err;
+      }
+    }
 
-    signal.addEventListener('abort', abortListener);
-
-    const fetchProof = (): void => {
-      client
-        .getInclusionProof(commitment)
-        .then((proof) => {
-          if (proof !== null) {
-            signal.removeEventListener('abort', abortListener);
-            clearTimeout(timeoutId);
-            return resolve(proof);
-          }
-
-          timeoutId = setTimeout(fetchProof, interval);
-        })
-        .catch((err) => {
-          if (err instanceof JsonRpcNetworkError && err.status === 404) {
-            timeoutId = setTimeout(fetchProof, interval);
-          } else {
-            throw err;
-          }
-        });
-    };
-
-    fetchProof();
-  });
+    try {
+      await sleep(interval, signal);
+    } catch (err) {
+      throw new SleepError(String(err || 'Sleep was aborted'));
+    }
+  }
 }
 
 async function createMintTokenData(secret: Uint8Array): Promise<IMintTokenData> {
@@ -92,13 +97,8 @@ async function createMintTokenData(secret: Uint8Array): Promise<IMintTokenData> 
   const salt = crypto.getRandomValues(new Uint8Array(32));
   const nonce = crypto.getRandomValues(new Uint8Array(32));
 
-  const predicate = await MaskedPredicate.create(
-    tokenId,
-    tokenType,
-    await SigningService.createFromSecret(secret, nonce),
-    HashAlgorithm.SHA256,
-    nonce,
-  );
+  const signingService = await SigningService.createFromSecret(secret, nonce);
+  const predicate = await MaskedPredicate.create(tokenId, tokenType, signingService, HashAlgorithm.SHA256, nonce);
 
   return {
     coinData,
@@ -118,7 +118,7 @@ describe('Transition', function () {
     const secret = new TextEncoder().encode('secret');
     const mintTokenData = await createMintTokenData(secret);
     const mintCommitment = await client.submitMintTransaction(
-      await DirectAddress.create(mintTokenData.predicate.reference.imprint),
+      await DirectAddress.create(mintTokenData.predicate.reference),
       mintTokenData.tokenId,
       mintTokenData.tokenType,
       mintTokenData.tokenData,
@@ -143,18 +143,19 @@ describe('Transition', function () {
     );
 
     const nonce = crypto.getRandomValues(new Uint8Array(32));
+    const signingservice = await SigningService.createFromSecret(new TextEncoder().encode('tere'), nonce);
     const recipientPredicate = await MaskedPredicate.create(
       token.id,
       token.type,
-      await SigningService.createFromSecret(new TextEncoder().encode('tere'), nonce),
+      signingservice,
       HashAlgorithm.SHA256,
       nonce,
     );
-    const recipient = await DirectAddress.create(recipientPredicate.reference.imprint);
+    const recipient = await DirectAddress.create(recipientPredicate.reference);
 
     const transactionData = await TransactionData.create(
       token.state,
-      recipient.toDto(),
+      recipient.toJSON(),
       crypto.getRandomValues(new Uint8Array(32)),
       await new DataHasher(HashAlgorithm.SHA256).update(textEncoder.encode('my custom data')).digest(),
       textEncoder.encode('my message'),
@@ -173,52 +174,26 @@ describe('Transition', function () {
       transaction,
     );
 
-    console.log(JSON.stringify(updateToken.toDto()));
+    console.log(JSON.stringify(updateToken.toJSON()));
   }, 15000);
 
   it('should import token and be able to send it', async () => {
-    const client = new StateTransitionClient(new TestAggregatorClient(new SparseMerkleTree(HashAlgorithm.SHA256)));
-    const secret = new TextEncoder().encode('tere');
-
-    let token = await new TokenFactory(new PredicateFactory()).create(
+    /*
+    442865be053688cf7cd912eca2e5f3f460faf055e1dcc0eadb22054285b8b0a3
+     */
+    const token = await new TokenFactory(new PredicateFactory()).create(
       JSON.parse(
-        '{"coins":"8282784065666538393365313563643239613565626236383363383133333232376531643162383465396435356438613465376463373566396437363265646539333761184a827840376665366664326661373437373736363037336630613735363934313833646533356336333232396362613736363632366135616265393938333239366663351849","data":"55a2039369747e513ec52fc785e4332466e99d7895e8b93ef60b2b7a6c5ebb60","id":"8f051698bc608b4212799af8d4101e4ecdc3c4a79875e26e0f8a96314b742fc0","nametagTokens":[],"state":{"data":"6d7920637573746f6d2064617461","unlockPredicate":{"algorithm":"secp256k1","hashAlgorithm":0,"nonce":"06fd8259729b5ceff83a243cc7004cbb9c7299aac7903109efc3b320df7ea46a","publicKey":"024fd11e5a1601aa0e3b44e3c38378789b4889d3b0edeaa108f5374bbea97c1880","type":"MASKED"}},"transactions":[{"data":{"dataHash":"0000cd798106e367051de52c58c2570654c08457db5ea88372d88c0667ec5ba1ee2b","reason":null,"recipient":"DIRECT://0000e06706e005ae77af03e68337498180d426fd10a0962903bf30778695019cc268a039fa80","salt":"581147be23e6db30675b34e32e8b9f83c42f3dd9438857795a7793d236019ebd"},"inclusionProof":{"authenticator":{"algorithm":"secp256k1","publicKey":"034734c06faabf0fd4678a2385507647f1c5de059c459dfeaf12bad1e4e7777f88","signature":"b719243cd1c20c21a738a06ddf337f38b1ac8b1dbf5686abd8039e75de91d7cc4c127a794067dfc3c8e332fa849ce095056aad25bc6e751b653e32974e0299af01","stateHash":"0000b907450f3aea55a489f89e591191e23be1fa0a3fc8c38593d530bc528449384f"},"merkleTreePath":{"root":"00007c7bd5749a48c5196815ade3bb5b4ba2ad4e552fd1e9f316c08a4b7bbe3df11d","steps":[{"path":"7588583787075137615614200187279234761188054928514090795834318452222291284236768822","value":"0000d8b9d10a3e1b6794fa8731f931105cea60c9b02b944ac260d39eb8703d51d9a1"}]},"transactionHash":"0000ea0d167db407b34e4a0a7f3ef19e84efa62c86a100556783658a4ce7a368ff28"}},{"data":{"dataHash":"0000371dd350eb385a9eb4ccf52c532b9f2fb5b24834ea634f4c27739b604cb08102","message":"6d79206d657373616765","nameTags":[],"recipient":"DIRECT://00005000623ab227763ee71c0e2cee4793b4ed103d07a62b7d3f0b2e40177a1536a34f65756a","salt":"bfdff35cb7cf6bb9e9048e1f39fa07cd6d0fa18af0250dca9119705bda8cf87b","sourceState":{"data":"b6eba5e1ffca19abc1167bf44989d0e007a178bb822f4ee62a617aed29023fac","unlockPredicate":{"algorithm":"secp256k1","hashAlgorithm":0,"nonce":"899567b1fc3b8db30032a1c0a7121ed05fa3e0321c6f5d4371f1cb2b4541e3c0","publicKey":"031a038b3b256cee466ce9a761f04522384aa1d5becb67e0dc2ede717a1e05e0d2","type":"MASKED"}}},"inclusionProof":{"authenticator":{"algorithm":"secp256k1","publicKey":"031a038b3b256cee466ce9a761f04522384aa1d5becb67e0dc2ede717a1e05e0d2","signature":"bfa35d1e5389af7f5fec1b2199582de1a32ad04f8332f3375768092e2bdd895b009bf21748f02dda28b670ee427aaa98f71335c631b5d6afff6b5d3750190cc701","stateHash":"0000721c65078cf73f750004db64b8ac5041d2b5cc221e2c853ce082b3faf4d26638"},"merkleTreePath":{"root":"0000475f90b5296710ec788a8a333f7ac5df9cc7d0965c5b4145c520de3d738a3935","steps":[{"path":"7588569218088438164672559934214159214370139797979814927050276356134513515792040107","sibling":"00002dcec6f7ea94cfe638a188fb92959bb6bf3128507e0eab7412b75186ee27d7b6","value":"00006836b376aa8b668eed4149afb4819c1536080559ab0bf713502e9b8a8a49c893"}]},"transactionHash":"00004a01e29ed90ca54a65c36c5ed1c125d88090c2b2e31fca26647569583182601b"}}],"type":"477e128b5cc280f5f8b957260678cb7d457396ff55e4e6c823d22a70c5e4ea37","version":"2.0"}',
+        '{"coins":[["16c9565fdb3a5a3496f04f2c9bf0de09b34f55b2970662a07898fabed317578c","38"],["21ee73434dced941ce83d3dac0c3f9261af74a321d1f8cfeb8d9f8721caa5e73","82"]],"data":"d9ad667e7a347cf14c1502a7ba150c3ccf0d0d4523f67ad526d8ae12902e814e","id":"62dc8146628b9e72828a9566f75b31daad58742618a8c5cc61f2e2be991c83ac","nametagTokens":[],"state":{"data":"6d7920637573746f6d2064617461","unlockPredicate":{"algorithm":"secp256k1","hashAlgorithm":0,"nonce":"b13790687f71346a443f54a6446477c2bc7700ec27eb6bf05a5295a707b5bf3c","publicKey":"02036cf36062511e4bfe7868c06c7611a1d15ba068e25f3518f614585bdae17d07","type":"MASKED"}},"transactions":[{"data":{"dataHash":"0000551aff593ca881abd47ae36c197dc9f394e06ff30e732dcdbdd3ed5ec3d0fe40","reason":null,"recipient":"DIRECT://88,34,0,0,68,167,89,228,116,207,32,101,3,229,157,243,246,183,8,220,102,214,135,36,162,109,72,139,152,236,236,252,100,30,168,103c1e61aa3","salt":"42eb215e685827145ae9e8f0e85acad6f121d1277c87d3386abcf7810dd04d81"},"inclusionProof":{"authenticator":{"algorithm":"secp256k1","publicKey":"02a40e00bb9f120383c34e83108b8f52e40558626311af9c27a2300fe889423a14","signature":"edd1b5ca5a93ad96499683989c09e6f9e8515929d6b2e0ba02e909062e690bf03290cd0290146e38e4aef7981b3a41364baae553980aa79c915a6d73b112375801","stateHash":"0000523980d0ac43090affe60aa5c8d62324e19004016d16766a7871d1ed49d2079b"},"merkleTreePath":{"root":"000038cb9f5b4169eb772777609817f231c44e1dfcf9f7a1db078ccb7ae7aacaae35","steps":[{"branch":["0000c91debe04166f5aae03d4580b31d2a03956a90e9716e33b70290ef5293f2e2ad"],"path":"7588649149295761100161440130452085754533110058562091409936174197616260138218570176","sibling":null}]},"transactionHash":"00001f3dfd815d76580ecdd64e0aeed062bbf6e4a5cbab99c57231d871a0c7e56cd8"}},{"data":{"dataHash":"0000371dd350eb385a9eb4ccf52c532b9f2fb5b24834ea634f4c27739b604cb08102","message":"6d79206d657373616765","nameTags":[],"recipient":"DIRECT://88,34,0,0,255,136,17,146,129,74,57,225,31,50,166,242,99,27,77,73,75,35,163,176,89,245,9,253,188,114,219,159,158,220,233,21bd9a3f67","salt":"669d4f7b0d83de53a8d7e47df4d55eaa497140dd9b22b1bfb05ffa74d7e6b807","sourceState":{"data":"1fa2b7207533884b07ca73f543fe84ff43b9286592616ad1d477b95677583ad4","unlockPredicate":{"algorithm":"secp256k1","hashAlgorithm":0,"nonce":"79d6d660cb0845fe7b2a8508ef9fb992c613b6e3e0d525ba192246ccefd081c1","publicKey":"03087b8dca5315324d737f03f0aafb64e88b3ebd35cba407fb76ef298d31dae3e5","type":"MASKED"}}},"inclusionProof":{"authenticator":{"algorithm":"secp256k1","publicKey":"03087b8dca5315324d737f03f0aafb64e88b3ebd35cba407fb76ef298d31dae3e5","signature":"71772878f316949152beafd099d83ae4ca73ed24359773c2c939ea4a184284aa739e9581d2d8d9ce618bc8d11be5fa7c03f58c801d8f2c500f8545fc4f66bf5301","stateHash":"00004af7ba6d6ff536176b944dbdda79d03dd062a972d76af3a3e17efe624ad9bfe2"},"merkleTreePath":{"root":"0000b84481027c50da30cb7491aaa7b9af8bbaf212fa98ad3e68ab2fdee847e398b9","steps":[{"branch":["0000263a450c27a110e1bf8456c78e2450ab6f630479eefabe0c3769686ee6422e65"],"path":"3794275205504007869408312821825704795923678604410441406998183603722408454352248239","sibling":"00000d8cc593d0cbda705dd65e01361fa880ff018a7133154047c1b48b48edc66e82"},{"branch":[],"path":"2","sibling":null}]},"transactionHash":"0000e4e9d983dd591341a8ba86e27809ba12091265d2af2ccbbcf2783a3997b682b3"}}],"type":"041cedab337d8432e848925ec6a6993915a63d9102093c2c0d5b82fe7efc6492","version":"2.0"}',
       ),
-      TestTokenData.decode,
+      TestTokenData.fromJSON,
     );
 
-    const salt = crypto.getRandomValues(new Uint8Array(32));
-    const recipientPredicate = await UnmaskedPredicate.create(
-      token.id,
-      token.type,
-      await SigningService.createFromSecret(textEncoder.encode('nextuser')),
-      HashAlgorithm.SHA256,
-      salt,
-    );
-    const recipient = await DirectAddress.create(recipientPredicate.reference.imprint);
-
-    const transactionData = await TransactionData.create(
-      token.state,
-      recipient.toDto(),
-      crypto.getRandomValues(new Uint8Array(32)),
-      await new DataHasher(HashAlgorithm.SHA256).update(textEncoder.encode('new custom data')).digest(),
-      textEncoder.encode('sending via public address'),
-      token.nametagTokens,
+    const signingservice = await SigningService.createFromSecret(
+      new TextEncoder().encode('tere'),
+      token.state.unlockPredicate.nonce,
     );
 
-    const tokenPredicate = token.state.unlockPredicate as MaskedPredicate;
-    const commitment = await client.submitTransaction(
-      transactionData,
-      await SigningService.createFromSecret(secret, tokenPredicate.nonce),
-    );
-
-    const transaction = await client.createTransaction(commitment, await client.getInclusionProof(commitment));
-
-    token = await client.finishTransaction(
-      token,
-      await TokenState.create(recipientPredicate, textEncoder.encode('new custom data')),
-      transaction,
-    );
+    expect(token.state.unlockPredicate.isOwner(signingservice.publicKey)).toBeTruthy();
 
     console.log(token.toString());
   }, 15000);
@@ -233,11 +208,19 @@ class TestTokenData implements ISerializable {
     return new Uint8Array(this._data);
   }
 
-  public static decode(data: Uint8Array): Promise<TestTokenData> {
-    return Promise.resolve(new TestTokenData(data));
+  public static fromJSON(data: unknown): Promise<TestTokenData> {
+    if (typeof data !== 'string') {
+      throw new Error('Invalid test token data');
+    }
+
+    return Promise.resolve(new TestTokenData(HexConverter.decode(data)));
   }
 
-  public encode(): Uint8Array {
+  public toJSON(): string {
+    return HexConverter.encode(this._data);
+  }
+
+  public toCBOR(): Uint8Array {
     return this.data;
   }
 

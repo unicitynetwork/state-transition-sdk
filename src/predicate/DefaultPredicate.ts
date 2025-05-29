@@ -1,5 +1,6 @@
 import { InclusionProofVerificationStatus } from '@unicitylabs/commons/lib/api/InclusionProof.js';
 import { RequestId } from '@unicitylabs/commons/lib/api/RequestId.js';
+import { CborEncoder } from '@unicitylabs/commons/lib/cbor/CborEncoder.js';
 import { DataHash } from '@unicitylabs/commons/lib/hash/DataHash.js';
 import { HashAlgorithm } from '@unicitylabs/commons/lib/hash/HashAlgorithm.js';
 import { HexConverter } from '@unicitylabs/commons/lib/util/HexConverter.js';
@@ -12,7 +13,7 @@ import { MintTransactionData } from '../transaction/MintTransactionData.js';
 import { Transaction } from '../transaction/Transaction.js';
 import { TransactionData } from '../transaction/TransactionData.js';
 
-interface IPredicateDto {
+interface IPredicateJson {
   readonly type: PredicateType;
   readonly publicKey: string;
   readonly algorithm: string;
@@ -42,7 +43,7 @@ export abstract class DefaultPredicate implements IPredicate {
     return this._nonce;
   }
 
-  public static isDto(data: unknown): data is IPredicateDto {
+  public static isJSON(data: unknown): data is IPredicateJson {
     return (
       typeof data === 'object' &&
       data !== null &&
@@ -57,7 +58,7 @@ export abstract class DefaultPredicate implements IPredicate {
     );
   }
 
-  public toDto(): IPredicateDto {
+  public toJSON(): IPredicateJson {
     return {
       algorithm: this.algorithm,
       hashAlgorithm: this.hashAlgorithm,
@@ -67,9 +68,23 @@ export abstract class DefaultPredicate implements IPredicate {
     };
   }
 
+  public toCBOR(): Uint8Array {
+    return CborEncoder.encodeArray([
+      CborEncoder.encodeTextString(this.type),
+      CborEncoder.encodeByteString(this.publicKey),
+      CborEncoder.encodeTextString(this.algorithm),
+      CborEncoder.encodeTextString(HashAlgorithm[this.hashAlgorithm]),
+      CborEncoder.encodeByteString(this.nonce),
+    ]);
+  }
+
   public async verify(
     transaction: Transaction<MintTransactionData<ISerializable> | TransactionData>,
   ): Promise<boolean> {
+    if (!transaction.inclusionProof.authenticator || !transaction.inclusionProof.transactionHash) {
+      return false;
+    }
+
     // Verify if input state and public key are correct.
     if (
       HexConverter.encode(transaction.inclusionProof.authenticator.publicKey) !== HexConverter.encode(this.publicKey) ||

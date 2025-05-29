@@ -1,3 +1,4 @@
+import { CborEncoder } from '@unicitylabs/commons/lib/cbor/CborEncoder.js';
 import { HexConverter } from '@unicitylabs/commons/lib/util/HexConverter.js';
 
 export class TokenId {
@@ -9,8 +10,12 @@ export class TokenId {
     return new TokenId(id);
   }
 
-  public toDto(): string {
+  public toJSON(): string {
     return HexConverter.encode(this._id);
+  }
+
+  public toCBOR(): Uint8Array {
+    return CborEncoder.encodeByteString(this._id);
   }
 
   public encode(): Uint8Array {

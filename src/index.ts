@@ -7,7 +7,6 @@ export * from './address/NameTagAddress.js';
 // API exports
 export * from './api/AggregatorClient.js';
 export * from './api/IAggregatorClient.js';
-export * from './api/IAuthenticator.js';
 export * from './api/SubmitCommitmentResponse.js';
 
 // Predicate exports

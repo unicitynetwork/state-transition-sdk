@@ -1,6 +1,5 @@
-import { InclusionProof } from '@unicitylabs/commons/lib/api/InclusionProof.js';
+import { InclusionProof, InclusionProofVerificationStatus } from '@unicitylabs/commons/lib/api/InclusionProof.js';
 import { RequestId } from '@unicitylabs/commons/lib/api/RequestId.js';
-import { CborDecoder } from '@unicitylabs/commons/lib/cbor/CborDecoder.js';
 import { DataHash } from '@unicitylabs/commons/lib/hash/DataHash.js';
 import { SigningService } from '@unicitylabs/commons/lib/signing/SigningService.js';
 import { HexConverter } from '@unicitylabs/commons/lib/util/HexConverter.js';
@@ -8,12 +7,12 @@ import { HexConverter } from '@unicitylabs/commons/lib/util/HexConverter.js';
 import { DirectAddress } from '../address/DirectAddress.js';
 import { ISerializable } from '../ISerializable.js';
 import { MINT_SUFFIX, MINTER_SECRET } from '../StateTransitionClient.js';
-import { ITokenDto, Token, TOKEN_VERSION } from './Token.js';
+import { ITokenJson, Token, TOKEN_VERSION } from './Token.js';
 import { TokenId } from './TokenId.js';
 import { TokenState } from './TokenState.js';
 import { TokenType } from './TokenType.js';
 import { IPredicateFactory } from '../predicate/IPredicateFactory.js';
-import { IMintTransactionDataDto, MintTransactionData } from '../transaction/MintTransactionData.js';
+import { IMintTransactionDataJson, MintTransactionData } from '../transaction/MintTransactionData.js';
 import { ITransactionDto, Transaction } from '../transaction/Transaction.js';
 import { ITransactionDataDto, TransactionData } from '../transaction/TransactionData.js';
 import { TokenCoinData } from './fungible/TokenCoinData.js';
@@ -22,8 +21,8 @@ export class TokenFactory {
   public constructor(private readonly predicateFactory: IPredicateFactory) {}
 
   public async create<TD extends ISerializable>(
-    data: ITokenDto,
-    createData: (data: Uint8Array) => Promise<TD>,
+    data: ITokenJson,
+    createData: (data: unknown) => Promise<TD>,
   ): Promise<Token<TD, MintTransactionData<ISerializable | null>>> {
     const tokenVersion = data.version;
     if (tokenVersion !== TOKEN_VERSION) {
@@ -32,8 +31,8 @@ export class TokenFactory {
 
     const tokenId = TokenId.create(HexConverter.decode(data.id));
     const tokenType = TokenType.create(HexConverter.decode(data.type));
-    const tokenData = await createData(HexConverter.decode(data.data));
-    const coinData = data.coins ? TokenCoinData.decode(HexConverter.decode(data.coins)) : null;
+    const tokenData = await createData(data.data);
+    const coinData = data.coins ? TokenCoinData.fromJSON(data.coins) : null;
 
     const mintTransaction = await this.createMintTransaction(
       tokenId,
@@ -46,9 +45,8 @@ export class TokenFactory {
 
     const signingService = await SigningService.createFromSecret(MINTER_SECRET, tokenId.encode());
 
-    const requestId = await RequestId.create(signingService.publicKey, mintTransaction.data.sourceState.hash);
-    if (!(await mintTransaction.inclusionProof.verify(requestId.toBigInt()))) {
-      throw new Error('Mint inclusion proof verification failed.');
+    if (!(await this.verifyMintTransaction(mintTransaction, signingService.publicKey))) {
+      throw new Error('Mint transaction verification failed.');
     }
 
     const transactions: [Transaction<MintTransactionData<ISerializable | null>>, ...Transaction<TransactionData>[]] = [
@@ -63,10 +61,8 @@ export class TokenFactory {
       );
 
       // TODO: Move address processing to a separate method
-      const expectedRecipient = await DirectAddress.create(
-        transaction.data.sourceState.unlockPredicate.reference.imprint,
-      );
-      if (expectedRecipient.toDto() !== previousTransaction.data.recipient) {
+      const expectedRecipient = await DirectAddress.create(transaction.data.sourceState.unlockPredicate.reference);
+      if (expectedRecipient.toJSON() !== previousTransaction.data.recipient) {
         throw new Error('Recipient address mismatch');
       }
 
@@ -91,8 +87,8 @@ export class TokenFactory {
       throw new Error('State data is not part of transaction.');
     }
 
-    const expectedRecipient = await DirectAddress.create(state.unlockPredicate.reference.imprint);
-    if (expectedRecipient.toDto() !== previousTransaction.data.recipient) {
+    const expectedRecipient = await DirectAddress.create(state.unlockPredicate.reference);
+    if (expectedRecipient.toJSON() !== previousTransaction.data.recipient) {
       throw new Error('Recipient address mismatch');
     }
 
@@ -106,7 +102,7 @@ export class TokenFactory {
     tokenData: ISerializable,
     coinData: TokenCoinData | null,
     sourceState: RequestId,
-    transaction: ITransactionDto<IMintTransactionDataDto>,
+    transaction: ITransactionDto<IMintTransactionDataJson>,
   ): Promise<Transaction<MintTransactionData<ISerializable | null>>> {
     return new Transaction(
       await MintTransactionData.create(
@@ -117,18 +113,20 @@ export class TokenFactory {
         sourceState,
         transaction.data.recipient,
         HexConverter.decode(transaction.data.salt),
-        transaction.data.dataHash ? DataHash.fromDto(transaction.data.dataHash) : null,
+        transaction.data.dataHash ? DataHash.fromJSON(transaction.data.dataHash) : null,
         // TODO: Parse reason properly
-        transaction.data.reason ? this.createMintReason(HexConverter.decode(transaction.data.reason)) : null,
+        transaction.data.reason ? this.createMintReason(transaction.data.reason) : null,
       ),
-      InclusionProof.fromDto(transaction.inclusionProof),
+      InclusionProof.fromJSON(transaction.inclusionProof),
     );
   }
 
-  private createMintReason(bytes: Uint8Array): ISerializable {
-    const data = CborDecoder.readArray(bytes);
-    const type = CborDecoder.readTextString(data[0]);
-    switch (type) {
+  private createMintReason(data: unknown): ISerializable {
+    if (typeof data !== 'object' || data == null || !('type' in data)) {
+      throw new Error('MintReason: data is not an object');
+    }
+
+    switch (data.type) {
       default:
         throw new Error('NOT IMPLEMENTED');
     }
@@ -147,11 +145,37 @@ export class TokenFactory {
         ),
         data.recipient,
         HexConverter.decode(data.salt),
-        data.dataHash ? DataHash.fromDto(data.dataHash) : null,
+        data.dataHash ? DataHash.fromJSON(data.dataHash) : null,
         data.message ? HexConverter.decode(data.message) : null,
         [], //await Promise.all(data.nameTags.map((input) => this.importToken(input, NameTagTokenData, predicateFactory))),
       ),
-      InclusionProof.fromDto(inclusionProof),
+      InclusionProof.fromJSON(inclusionProof),
     );
+  }
+
+  private async verifyMintTransaction(
+    transaction: Transaction<MintTransactionData<ISerializable | null>>,
+    publicKey: Uint8Array,
+  ): Promise<boolean> {
+    if (!transaction.inclusionProof.authenticator || !transaction.inclusionProof.transactionHash) {
+      return false;
+    }
+
+    if (
+      HexConverter.encode(transaction.inclusionProof.authenticator.publicKey) !== HexConverter.encode(publicKey) ||
+      !transaction.inclusionProof.authenticator.stateHash.equals(transaction.data.sourceState.hash)
+    ) {
+      return false; // input mismatch
+    }
+
+    // Verify if transaction data is valid.
+    if (!(await transaction.inclusionProof.authenticator.verify(transaction.data.hash))) {
+      return false;
+    }
+
+    // Verify inclusion proof path.
+    const requestId = await RequestId.create(publicKey, transaction.data.sourceState.hash);
+    const status = await transaction.inclusionProof.verify(requestId.toBigInt());
+    return status === InclusionProofVerificationStatus.OK;
   }
 }

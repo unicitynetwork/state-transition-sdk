@@ -50,7 +50,7 @@ export class StateTransitionClient {
       tokenData,
       coinData,
       sourceState,
-      recipient.toDto(),
+      recipient.toJSON(),
       salt,
       dataHash ?? null,
       reason,
@@ -100,12 +100,11 @@ export class StateTransitionClient {
       throw new Error('Inclusion proof verification failed.');
     }
 
-    const hashAlgorithm = HashAlgorithm[inclusionProof.authenticator.stateHash.algorithm];
-    if (!hashAlgorithm) {
+    if (!inclusionProof.authenticator || !HashAlgorithm[inclusionProof.authenticator.stateHash.algorithm]) {
       throw new Error('Invalid inclusion proof hash algorithm.');
     }
 
-    if (!inclusionProof.transactionHash.equals(transactionData.hash)) {
+    if (!inclusionProof.transactionHash?.equals(transactionData.hash)) {
       throw new Error('Payload hash mismatch');
     }
 
@@ -124,8 +123,8 @@ export class StateTransitionClient {
 
     // TODO: Move address processing to a separate method
     // TODO: Resolve proxy address
-    const expectedAddress = await DirectAddress.create(state.unlockPredicate.reference.imprint);
-    if (expectedAddress.toDto() !== transaction.data.recipient) {
+    const expectedAddress = await DirectAddress.create(state.unlockPredicate.reference);
+    if (expectedAddress.toJSON() !== transaction.data.recipient) {
       throw new Error('Recipient address mismatch');
     }
 

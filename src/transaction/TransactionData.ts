@@ -1,3 +1,4 @@
+import { CborEncoder } from '@unicitylabs/commons/lib/cbor/CborEncoder.js';
 import { DataHash } from '@unicitylabs/commons/lib/hash/DataHash.js';
 import { DataHasher } from '@unicitylabs/commons/lib/hash/DataHasher.js';
 import { HashAlgorithm } from '@unicitylabs/commons/lib/hash/HashAlgorithm.js';
@@ -5,19 +6,17 @@ import { HexConverter } from '@unicitylabs/commons/lib/util/HexConverter.js';
 import { dedent } from '@unicitylabs/commons/lib/util/StringUtils.js';
 
 import { NameTagToken } from '../token/NameTagToken.js';
-import { ITokenDto } from '../token/Token.js';
-import { ITokenStateDto, TokenState } from '../token/TokenState.js';
+import { ITokenJson } from '../token/Token.js';
+import { ITokenStateJson, TokenState } from '../token/TokenState.js';
 
 export interface ITransactionDataDto {
-  readonly sourceState: ITokenStateDto;
+  readonly sourceState: ITokenStateJson;
   readonly recipient: string;
   readonly salt: string;
   readonly dataHash: string | null;
   readonly message: string | null;
-  readonly nameTags: ITokenDto[];
+  readonly nameTags: ITokenJson[];
 }
-
-const textEncoder = new TextEncoder();
 
 export class TransactionData {
   private constructor(
@@ -51,11 +50,15 @@ export class TransactionData {
   ): Promise<TransactionData> {
     return new TransactionData(
       await new DataHasher(HashAlgorithm.SHA256)
-        .update(state.hash.imprint)
-        .update(dataHash?.imprint ?? new Uint8Array())
-        .update(textEncoder.encode(recipient))
-        .update(salt)
-        .update(message ?? new Uint8Array())
+        .update(
+          CborEncoder.encodeArray([
+            state.hash.toCBOR(),
+            dataHash?.toCBOR() ?? CborEncoder.encodeNull(),
+            CborEncoder.encodeTextString(recipient),
+            CborEncoder.encodeByteString(salt),
+            CborEncoder.encodeOptional(message, CborEncoder.encodeByteString),
+          ]),
+        )
         .digest(),
       state,
       recipient,
@@ -66,15 +69,26 @@ export class TransactionData {
     );
   }
 
-  public toDto(): ITransactionDataDto {
+  public toJSON(): ITransactionDataDto {
     return {
-      dataHash: this.dataHash?.toDto() ?? null,
+      dataHash: this.dataHash?.toJSON() ?? null,
       message: this._message ? HexConverter.encode(this._message) : null,
-      nameTags: this.nameTags.map((token) => token.toDto()),
+      nameTags: this.nameTags.map((token) => token.toJSON()),
       recipient: this.recipient,
       salt: HexConverter.encode(this.salt),
-      sourceState: this.sourceState.toDto(),
+      sourceState: this.sourceState.toJSON(),
     };
+  }
+
+  public toCBOR(): Uint8Array {
+    return CborEncoder.encodeArray([
+      this.sourceState.toCBOR(),
+      CborEncoder.encodeTextString(this.recipient),
+      CborEncoder.encodeByteString(this.salt),
+      this.dataHash?.toCBOR() ?? CborEncoder.encodeNull(),
+      this._message ? CborEncoder.encodeByteString(this._message) : CborEncoder.encodeNull(),
+      CborEncoder.encodeArray(this.nameTags.map((token) => token.toCBOR())),
+    ]);
   }
 
   public toString(): string {
