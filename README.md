@@ -1,396 +1,263 @@
-# Unicity State Transition SDK
+# State Transition SDK
 
-A comprehensive TypeScript/JavaScript SDK for building applications on the Unicity network's off-chain token transaction framework. This SDK enables developers to mint, transfer, and manage tokens using Unicity's innovative single-spend proof system that provides blockchain security with off-chain scalability.
+Generic State Transition Flow engine for value-carrier agents on the Unicity Network.
 
 ## Overview
 
-The Unicity State Transition SDK implements an off-chain token management paradigm where:
+The State Transition SDK is an off-chain token transaction framework that follows a paradigm where tokens are managed, stored, and transferred off-chain (on users' premises or in cloud, outside of the blockchain ledger) with only single-spend proofs generated on-chain.
 
-- **Tokens are managed off-chain** - Stored and transferred on users' premises or in cloud infrastructure, outside of blockchain ledgers
-- **Single-spend proofs are generated on-chain** - Only cryptographic commitments are submitted to the Unicity blockchain
-- **Privacy-preserving** - Transaction commitments contain no information about tokens, states, or transaction nature
-- **Horizontally scalable** - Capable of accommodating millions of transaction commitments per block
+In this system, a token is a stand-alone entity containing all information and cryptographic proofs attesting to the current token's state (ownership, value, etc.). Token state changes are accompanied by consulting with the blockchain infrastructure (Unicity) to produce proof of single spend, ensuring no double-spending occurs.
 
-## Key Concepts
+### Key Features
 
-### Tokens
-Self-contained entities that include all information and cryptographic proofs attesting to their current state (ownership, value, etc.). Each token contains:
+- **Off-chain Privacy**: Cryptographic commitments contain no information about the token, its state, or transaction nature
+- **Horizontal Scalability**: Millions of transaction commitments per block capability
+- **Zero-Knowledge Transactions**: Observers cannot determine if commitments refer to token transactions or other processes
+- **Distributed Hash Tree**: All transaction commitments are aggregated into a global distributed hash tree rooted in the Unicity blockchain
 
-- **tokenId**: Unique 256-bit identifier
-- **tokenClass**: Token type identifier (similar to ERC-20 contract addresses)
-- **tokenValue**: Numeric value represented as big integer
-- **Genesis**: Minting-related proofs and data
-- **Transitions**: History of state changes with proofs
-- **State**: Current ownership and challenge information
+## Web GUI Token Manager
 
-### State Transitions
-Records that define how a token state changes, including:
-- Proofs unlocking the source state challenge
-- Unicity single-spend proof
-- Cryptographic salt for privacy
+A user-friendly web interface is available at: **https://unicitynetwork.github.io/state-transition-sdk/**
 
-### Transactions vs Transitions
-- **Transaction**: Created by sender, contains source state and recipient pointer
-- **Transition**: Resolved by recipient, contains full source and destination states
+### Web GUI Features
 
-## Web GUI interface
-[Token GUI stand-alone page](https://unicitynetwork.github.io/state-transition-sdk/)
+The web interface provides three main panels for token management:
 
-## Installation
+#### Left Panel - Token State Display
+- Token ID, Class, Public Key, Nonce, Value
+- Token status checking with "Check" button
+- Real-time token state information
+
+#### Central Panel - Token Data & Secret Management
+- Secret field for password-based token locking/unlocking
+- Token data display and hash verification
+- JSON document view for complete token information
+
+#### Right Panel - Token Actions
+- **New**: Mint new tokens
+- **Import**: Import received tokens
+- **Send**: Transfer tokens to recipients
+- **Generate Pointer/Nonce**: Create recipient addresses
+
+### Quick Start with Web GUI
+
+#### Minting a New Token
+1. Set password in "Secret" field (central panel)
+2. Set token type (default: `unicity_test_coin`) in right panel
+3. Set token value (default: `1000000000000000000`) in right panel
+4. Click "New" button and wait for Unicity certificate from gateway
+5. Token JSON will populate central field, token info appears in left panel
+
+#### Sending Tokens
+1. Recipient generates pointer using "Generate Pointer/Nonce" button
+2. Recipient shares pointer with sender (keeps nonce private)
+3. Sender sets password in "Secret" field
+4. Sender enters recipient's pointer below "Send" button
+5. Click "Send" and wait for transaction to complete
+6. Share updated JSON document with recipient
+
+#### Receiving Tokens
+1. Set password in "Secret" field (central panel)
+2. Enter saved nonce in field below "Import" button
+3. Paste received token JSON into central field
+4. Click "Import" button and wait for status update to "Spendable"
+
+## Installation & Setup
+
+### Prerequisites
+- Node.js and npm installed
+- Git for cloning the repository
+
+### Installation Steps
 
 ```bash
-npm install @unicity/state-transition-sdk
-```
-
-### From Source
-
-```bash
+# Clone the repository with submodules
 git clone --recurse-submodules https://github.com/unicitynetwork/state-transition-sdk.git
+
+# Navigate to project directory
 cd state-transition-sdk
+
+# Install dependencies
 npm install
-npm run build
+
+# Navigate to aggregators_net subfolder and install dependencies
+cd aggregators_net
+npm install
 ```
 
-## Quick Start
-
-### 1. Import the SDK
-
-```javascript
-import { StateMachine, Helper } from '@unicity/state-transition-sdk';
-```
-
-### 2. Mint a New Token
-
-```javascript
-const secret = "your-secret-password";
-const tokenClass = "unicity_test_coin";
-const tokenValue = "1000000000000000000"; // 1 token with 18 decimals
-
-// Mint a new token
-const tokenFlow = await StateMachine.mint({
-  tokenClass,
-  tokenValue,
-  secret
-});
-
-console.log("Token minted:", tokenFlow.token.tokenId);
-```
-
-### 3. Generate Recipient Pointer
-
-```javascript
-// Recipient generates a pointer to receive tokens
-const recipientSecret = "recipient-secret";
-const nonce = Helper.generateNonce();
-
-const pointer = Helper.calculatePointer({
-  tokenClass,
-  secret: recipientSecret,
-  nonce
-});
-
-console.log("Share this pointer with sender:", pointer);
-console.log("Keep this nonce secret:", nonce);
-```
-
-### 4. Send a Token
-
-```javascript
-// Sender creates transaction
-const transaction = await StateMachine.createTx({
-  token: tokenFlow.token,
-  destPointer: pointer,
-  secret: senderSecret
-});
-
-// Export for sharing with recipient
-const exportedFlow = StateMachine.exportFlow(transaction);
-```
-
-### 5. Receive a Token
-
-```javascript
-// Recipient resolves transaction
-const receivedFlow = await StateMachine.importFlow({
-  flowData: exportedFlow,
-  nonce: recipientNonce,
-  secret: recipientSecret
-});
-
-console.log("Token received! New owner:", receivedFlow.token.state.challenge.pubkey);
-```
-
-## API Reference
-
-### StateMachine
-
-Core functionality for token lifecycle management.
-
-#### `mint(options)`
-Creates a new token with Unicity certificate proving single mint.
-
-```javascript
-const result = await StateMachine.mint({
-  tokenClass: "string",    // Token type identifier
-  tokenValue: "string",    // Token value as string
-  secret: "string",        // User secret for key derivation
-  tokenId?: "string",      // Optional custom token ID
-  nonce?: "string"         // Optional custom nonce
-});
-```
-
-#### `createTx(options)`
-Generates transaction structure and obtains single-spend proof.
-
-```javascript
-const transaction = await StateMachine.createTx({
-  token: Token,           // Token object to spend
-  destPointer: "string",  // Recipient's pointer
-  secret: "string",       // Sender's secret
-  salt?: "string"         // Optional custom salt
-});
-```
-
-#### `importFlow(options)`
-Imports and processes token flow, resolving transactions if present.
-
-```javascript
-const processed = await StateMachine.importFlow({
-  flowData: "string",     // JSON flow data
-  nonce?: "string",       // Recipient nonce (if receiving)
-  secret?: "string"       // User secret (if receiving)
-});
-```
-
-#### `exportFlow(tokenOrTransaction)`
-Exports token/transaction as JSON string for sharing.
-
-```javascript
-const jsonFlow = StateMachine.exportFlow(tokenData);
-```
-
-#### `getTokenStatus(options)`
-Checks token ownership and spend status against Unicity network.
-
-```javascript
-const status = await StateMachine.getTokenStatus({
-  token: Token,
-  secret: "string"
-});
-```
-
-#### `collectTokens(options)`
-Scans tokens and filters unspent ones for a given user.
-
-```javascript
-const ownedTokens = await StateMachine.collectTokens({
-  tokens: Token[],
-  secret: "string"
-});
-```
-
-### Helper
-
-Utility functions for cryptographic operations and data manipulation.
-
-#### `calculatePointer(options)`
-Derives recipient pointer for privacy-preserving transfers.
-
-```javascript
-const pointer = Helper.calculatePointer({
-  tokenClass: "string",
-  secret: "string",
-  nonce: "string"
-});
-```
-
-#### `generateNonce()`
-Generates cryptographically secure random nonce.
-
-```javascript
-const nonce = Helper.generateNonce();
-```
-
-## Command Line Interface
-
-The SDK includes a comprehensive CLI tool for token management.
-
-### Token Manager
+### Building for Distribution
 
 ```bash
-# Mint a new token
-./token_manager.js mint --tokenClass="my_token" --tokenValue="1000000000000000000" --secret="my_secret"
+# Build TypeScript to lib directory
+npm run build
+
+# Publish to npm (if you have publishing rights)
+npm publish
+```
+
+## SDK Components
+
+### Core Libraries
+
+#### `state_machine.js`
+Main SDK library with core functions:
+
+- **`mint`**: Creates token structure and generates Unicity certificate for single mint proof
+- **`createTx`**: Generates transaction structure and single-spend proof
+- **`exportFlow`**: Exports token and transaction as JSON object
+- **`importFlow`**: Imports token/transaction from JSON, resolves transactions into transitions
+- **`getTokenStatus`**: Probes current token state and spend status via Unicity gateway
+- **`collectTokens`**: Scans token sets and filters unspent tokens for given user
+
+#### `helper.js`
+Utility functions:
+
+- **`calculatePointer`**: Derives recipient pointer from tokenClass, secret, and nonce
+
+#### `token_manager.js`
+Command-line tool for processing transaction flows:
+
+```bash
+# Mint new token
+./token_manager.js mint [options]
 
 # Generate recipient pointer
-./token_manager.js pointer --tokenClass="my_token" --secret="recipient_secret" --nonce="123456"
+./token_manager.js pointer [options]
 
 # Send token to recipient
-echo '{"token":...}' | ./token_manager.js send --destPointer="abc123..." --secret="sender_secret"
+./token_manager.js send [options]
 
-# Receive token
-echo '{"token":..., "transaction":...}' | ./token_manager.js receive --nonce="123456" --secret="recipient_secret"
+# Receive and process token
+./token_manager.js receive [options]
 
-# Check balance
-./token_manager.js summary --secret="my_secret" < token_files.json
+# Show token balance summary
+./token_manager.js summary [options]
 ```
 
-### Bash Scripts
+### CLI Scripts
 
-Convenient wrapper scripts for common operations:
+Located in `./cli/` directory for managing TX flows stored in `./txf/` folder:
+
+#### `mint.sh`
+```bash
+./mint.sh
+# Prompts for: Token ID, Token Class, Token Value, Nonce, User Secret
+```
+
+#### `pointer.sh`
+```bash
+./pointer.sh
+# Generates recipient pointer and nonce
+```
+
+#### `send.sh`
+```bash
+./send.sh
+# Lists available tokens and creates transaction
+```
+
+#### `receive.sh`
+```bash
+./receive.sh
+# Resolves transaction into token ownership transfer
+```
+
+#### `summarize.sh`
+```bash
+./summarize.sh
+# Shows balance and owned tokens for a user
+```
+
+## Core Concepts
+
+### Token Structure
+A token contains:
+- **tokenId**: Unique 256-bit identifier
+- **tokenClass**: 256-bit code identifying token type/class
+- **tokenValue**: Numeric value as big integer (supports 10^18 fractional units)
+- **Genesis**: Minting-related proofs and data
+- **Transitions**: Sequence of state transitions with Unicity proofs
+- **State**: Current token state with public key, nonce, etc.
+
+### Token State
+Represents current ownership challenge:
+- **tokenId** & **tokenClass**: Token identification
+- **pubkey**: Owner's public key
+- **nonce**: One-time random value per public key-token pair
+
+### Transactions vs Transitions
+- **Transaction**: Created by sender with source state, recipient pointer, and salt
+- **Transition**: Resolved by recipient who knows the nonce, containing full source and destination states
+
+### Commitment Structure
+Unicity commitments contain:
+- **RequestId**: Unique identifier derived from token state
+- **Payload**: Transaction digest with random salt
+- **Authenticator**: Owner's public key, signature, and obfuscated token state
+
+### Privacy Features
+- **State Obfuscation**: Token states hidden using recipient nonces and pointers
+- **One-time Keys**: Public keys derived from user secret + random nonce
+- **Transaction Salt**: Random values prevent transaction prediction
+- **Zero-Knowledge**: Commitments reveal no information about tokens or transactions
+
+## Example Usage
+
+### Complete Token Transfer Flow
 
 ```bash
-# In cli/ directory
-./mint.sh      # Interactive token minting
-./pointer.sh   # Generate recipient pointer
-./send.sh      # Send token to recipient
-./receive.sh   # Receive and process token
-./summarize.sh # Check token balance
+# User1: Mint a token
+./cli/mint.sh
+# Enter details, save generated .txf file
+
+# User2: Generate pointer
+./cli/pointer.sh
+# Share pointer with User1, keep nonce private
+
+# User1: Send token
+./cli/send.sh
+# Select token file, enter User2's pointer
+# Share updated .txf file with User2
+
+# User2: Receive token
+./cli/receive.sh
+# Enter nonce and secret to claim ownership
+
+# User2: Check balance
+./cli/summarize.sh
+# View all owned tokens and total balance
 ```
 
-## Token Flow Example
+## Network Configuration
 
-Here's a complete example of the token lifecycle:
+- **Test Gateway**: `https://gateway-test1.unicity.network:443`
+- **Default Token Class**: `unicity_test_coin`
+- **Default Token Value**: `10000000000000000000` (10^19 atomic units)
 
-```javascript
-import { StateMachine, Helper } from '@unicity/state-transition-sdk';
+## File Structure
 
-async function completeTokenFlow() {
-  const senderSecret = "alice_secret";
-  const recipientSecret = "bob_secret";
-  const tokenClass = "example_coin";
-  
-  // 1. Alice mints a token
-  console.log("1. Minting token...");
-  const mintResult = await StateMachine.mint({
-    tokenClass,
-    tokenValue: "5000000000000000000", // 5 tokens
-    secret: senderSecret
-  });
-  
-  // 2. Bob generates pointer
-  console.log("2. Generating recipient pointer...");
-  const bobNonce = Helper.generateNonce();
-  const bobPointer = Helper.calculatePointer({
-    tokenClass,
-    secret: recipientSecret,
-    nonce: bobNonce
-  });
-  
-  // 3. Alice sends token to Bob
-  console.log("3. Creating transaction...");
-  const transaction = await StateMachine.createTx({
-    token: mintResult.token,
-    destPointer: bobPointer,
-    secret: senderSecret
-  });
-  
-  // 4. Alice exports flow for Bob
-  const exportedFlow = StateMachine.exportFlow(transaction);
-  
-  // 5. Bob receives and imports the token
-  console.log("4. Receiving token...");
-  const bobResult = await StateMachine.importFlow({
-    flowData: exportedFlow,
-    nonce: bobNonce,
-    secret: recipientSecret
-  });
-  
-  // 6. Verify Bob owns the token
-  const bobStatus = await StateMachine.getTokenStatus({
-    token: bobResult.token,
-    secret: recipientSecret
-  });
-  
-  console.log("Transfer complete! Bob's token status:", bobStatus);
-}
 ```
-
-## Privacy Features
-
-### State Obfuscation
-- Token states are obfuscated with random nonces
-- Observers cannot determine token IDs, classes, or owner keys from network traffic
-- Commitments are indistinguishable from other types of data
-
-### One-time Key Usage
-- Public keys are derived from user secrets and one-time nonces
-- Users can access tokens through seemingly unrelated key pairs
-- Prevents linking transactions to specific identities
-
-### Zero-Knowledge Commitments
-- Only commitment hashes are submitted to Unicity network
-- No transaction details, amounts, or parties are revealed
-- Maintains privacy while ensuring double-spend prevention
+state-transition-sdk/
+├── state_machine.js     # Core SDK functions
+├── helper.js            # Utility functions  
+├── token_manager.js     # CLI token management tool
+├── cli/                 # Bash scripts for token operations
+│   ├── mint.sh          # Mint new tokens
+│   ├── pointer.sh       # Generate recipient pointers
+│   ├── send.sh          # Send tokens
+│   ├── receive.sh       # Receive tokens
+│   └── summarize.sh     # Show token balance
+├── txf/                 # Transaction flow files storage
+├── aggregators_net/     # Network aggregation components
+└── lib/                 # Compiled TypeScript output
+```
 
 ## Security Considerations
 
-### Key Management
-- Store user secrets securely (use hardware wallets, secure enclaves)
-- Never share nonces used for receiving tokens
-- Rotate secrets regularly for enhanced security
-
-### Token Storage
-- Token files can be safely stored on public media when encrypted
-- Always backup token JSON files before operations
-- Verify token status before attempting transfers
-
-### Network Security
-- All communications with Unicity gateway use HTTPS
-- Implement proper error handling for network failures
-- Validate all inputs and outputs
-
-## Error Handling
-
-```javascript
-try {
-  const result = await StateMachine.mint({
-    tokenClass: "test_coin",
-    tokenValue: "1000000000000000000",
-    secret: "my_secret"
-  });
-} catch (error) {
-  if (error.code === 'NETWORK_ERROR') {
-    console.log("Network connection failed, retry later");
-  } else if (error.code === 'INVALID_PROOF') {
-    console.log("Cryptographic proof validation failed");
-  } else {
-    console.log("Unexpected error:", error.message);
-  }
-}
-```
-
-## Configuration
-
-### Gateway Configuration
-The SDK connects to Unicity gateway at `https://gateway-test1.unicity.network:443` by default.
-
-```javascript
-// Configure custom gateway
-StateMachine.configure({
-  gatewayUrl: "https://your-gateway.unicity.network:443",
-  timeout: 30000,
-  retries: 3
-});
-```
-
-### Token Classes
-Define custom token classes for your application:
-
-```javascript
-const myTokenClass = "4f2d8a7b9c1e6d3a8f5b2e9c7a1d4f8e6b3c9a2d5f8e1b4c7a9d2f5e8b1c4a7";
-```
-
-## Development and Testing
-
-### Running Tests
-```bash
-npm test
-```
-
-### Building from Source
-```bash
-npm run build
-```
+- **Private Key Management**: User secrets derive one-time keypairs
+- **Nonce Security**: Recipients must keep nonces private until token import
+- **File Storage**: TX flow files are safe to store publicly when password-locked
+- **Network Privacy**: All communications with Unicity are cryptographically obfuscated
 
 ## Support and Resources
 
