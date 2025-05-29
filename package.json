@@ -1,6 +1,6 @@
 {
   "name": "@unicitylabs/state-transition-sdk",
-  "version": "1.4.1",
+  "version": "1.4.6",
   "description": "Generic State Transition Flow engine for value-carrier agents",
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",
@@ -11,8 +11,9 @@
     "build:check": "tsc --noEmit",
     "lint": "eslint \"src/**/*\"",
     "lint:fix": "eslint \"src/**/*\" --fix",
-    "test": "jest tests/",
-    "test:ci": "jest tests/ --ci --reporters=default",
+    "test": "node --experimental-vm-modules node_modules/.bin/jest tests/",
+    "test:ci": "node --experimental-vm-modules node_modules/.bin/jest tests/ --ci --reporters=default",
+    "test:single": "node --experimental-vm-modules node_modules/.bin/jest",
     "prepublishOnly": "npm run build"
   },
   "repository": {
