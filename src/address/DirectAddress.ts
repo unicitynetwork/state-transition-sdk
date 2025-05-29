@@ -33,6 +33,6 @@ export class DirectAddress implements IAddress {
   }
 
   public toString(): string {
-    return `${this.scheme}://${this.data.toCBOR()}${HexConverter.encode(this.checksum)}`;
+    return `${this.scheme}://${HexConverter.encode(this.data.toCBOR())}${HexConverter.encode(this.checksum)}`;
   }
 }
