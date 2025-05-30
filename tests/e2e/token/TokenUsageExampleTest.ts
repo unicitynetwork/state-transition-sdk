@@ -3,26 +3,22 @@ import { DataHasher } from '@unicitylabs/commons/lib/hash/DataHasher.js';
 import { HashAlgorithm } from '@unicitylabs/commons/lib/hash/HashAlgorithm.js';
 import { JsonRpcNetworkError } from '@unicitylabs/commons/lib/json-rpc/JsonRpcNetworkError.js';
 import { SigningService } from '@unicitylabs/commons/lib/signing/SigningService.js';
-import { SparseMerkleTree } from '@unicitylabs/commons/lib/smt/SparseMerkleTree.js';
-import { HexConverter } from '@unicitylabs/commons/lib/util/HexConverter.js';
-import { dedent } from '@unicitylabs/commons/lib/util/StringUtils.js';
 
-import { DirectAddress } from '../../src/address/DirectAddress.js';
-import { ISerializable } from '../../src/ISerializable.js';
-import { MaskedPredicate } from '../../src/predicate/MaskedPredicate.js';
-import { PredicateFactory } from '../../src/predicate/PredicateFactory.js';
-import { StateTransitionClient } from '../../src/StateTransitionClient.js';
-import { CoinId } from '../../src/token/fungible/CoinId.js';
-import { TokenCoinData } from '../../src/token/fungible/TokenCoinData.js';
-import { Token } from '../../src/token/Token.js';
-import { TokenFactory } from '../../src/token/TokenFactory.js';
-import { TokenId } from '../../src/token/TokenId.js';
-import { TokenState } from '../../src/token/TokenState.js';
-import { TokenType } from '../../src/token/TokenType.js';
-import { Commitment } from '../../src/transaction/Commitment.js';
-import { MintTransactionData } from '../../src/transaction/MintTransactionData.js';
-import { TransactionData } from '../../src/transaction/TransactionData.js';
-import { TestAggregatorClient } from '../TestAggregatorClient.js';
+import { DirectAddress } from '../../../src/address/DirectAddress.js';
+import { AggregatorClient } from '../../../src/api/AggregatorClient.js';
+import { ISerializable } from '../../../src/ISerializable.js';
+import { MaskedPredicate } from '../../../src/predicate/MaskedPredicate.js';
+import { StateTransitionClient } from '../../../src/StateTransitionClient.js';
+import { CoinId } from '../../../src/token/fungible/CoinId.js';
+import { TokenCoinData } from '../../../src/token/fungible/TokenCoinData.js';
+import { Token } from '../../../src/token/Token.js';
+import { TokenId } from '../../../src/token/TokenId.js';
+import { TokenState } from '../../../src/token/TokenState.js';
+import { TokenType } from '../../../src/token/TokenType.js';
+import { Commitment } from '../../../src/transaction/Commitment.js';
+import { MintTransactionData } from '../../../src/transaction/MintTransactionData.js';
+import { TransactionData } from '../../../src/transaction/TransactionData.js';
+import { TestTokenData } from '../../TestTokenData.js';
 
 const textEncoder = new TextEncoder();
 
@@ -113,8 +109,10 @@ async function createMintTokenData(secret: Uint8Array): Promise<IMintTokenData> 
 }
 
 describe('Transition', function () {
-  it('should verify the token latest state', async () => {
-    const client = new StateTransitionClient(new TestAggregatorClient(new SparseMerkleTree(HashAlgorithm.SHA256)));
+  it('mint, transfer and verify', async () => {
+    const aggregatorUrl = process.env.AGGREGATOR_URL ?? 'http://127.0.0.1:80';
+    console.log('connecting to aggregator url: ' + aggregatorUrl);
+    const client = new StateTransitionClient(new AggregatorClient(aggregatorUrl));
     const secret = new TextEncoder().encode('secret');
     const mintTokenData = await createMintTokenData(secret);
     const mintCommitment = await client.submitMintTransaction(
@@ -176,84 +174,4 @@ describe('Transition', function () {
 
     console.log(JSON.stringify(updateToken.toJSON()));
   }, 15000);
-
-  it('should import token and be able to send it', async () => {
-    // Let's modify this test to use a more focused approach without relying on the full token JSON
-    const client = new StateTransitionClient(new TestAggregatorClient(new SparseMerkleTree(HashAlgorithm.SHA256)));
-    const secret = new TextEncoder().encode('secret');
-    const mintTokenData = await createMintTokenData(secret);
-    
-    // Create a token directly using the first test's approach since we know that works
-    const mintCommitment = await client.submitMintTransaction(
-      await DirectAddress.create(mintTokenData.predicate.reference),
-      mintTokenData.tokenId,
-      mintTokenData.tokenType,
-      mintTokenData.tokenData,
-      mintTokenData.coinData,
-      mintTokenData.salt,
-      await new DataHasher(HashAlgorithm.SHA256).update(mintTokenData.data).digest(),
-      null,
-    );
-
-    const mintTransaction = await client.createTransaction(
-      mintCommitment,
-      await waitInclusionProof(client, mintCommitment),
-    );
-
-    const token = new Token(
-      mintTokenData.tokenId,
-      mintTokenData.tokenType,
-      mintTokenData.tokenData,
-      mintTokenData.coinData,
-      await TokenState.create(mintTokenData.predicate, mintTokenData.data),
-      [mintTransaction],
-    );
-
-    const signingservice = await SigningService.createFromSecret(
-      secret,
-      token.state.unlockPredicate.nonce,
-    );
-
-    expect(token.state.unlockPredicate.isOwner(signingservice.publicKey)).toBeTruthy();
-    
-    // Test the token's functionality
-    expect(token.id).toBeDefined();
-    expect(token.type).toBeDefined();
-    expect(token.data).toBeDefined();
-    expect(token.state).toBeDefined();
-    expect(token.transactions.length).toBeGreaterThan(0);
-    
-    console.log(token.toString());
-  }, 15000);
 });
-
-class TestTokenData implements ISerializable {
-  public constructor(private readonly _data: Uint8Array) {
-    this._data = new Uint8Array(_data);
-  }
-
-  public get data(): Uint8Array {
-    return new Uint8Array(this._data);
-  }
-
-  public static fromJSON(data: unknown): Promise<TestTokenData> {
-    if (typeof data !== 'string') {
-      throw new Error('Invalid test token data');
-    }
-
-    return Promise.resolve(new TestTokenData(HexConverter.decode(data)));
-  }
-
-  public toJSON(): string {
-    return HexConverter.encode(this._data);
-  }
-
-  public toCBOR(): Uint8Array {
-    return this.data;
-  }
-
-  public toString(): string {
-    return dedent`
-      TestTokenData: ${HexConverter.encode(this.data)}`;
-  }
-}
