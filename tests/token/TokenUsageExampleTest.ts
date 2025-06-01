@@ -14,10 +14,11 @@ import { ISerializable } from '../../src/ISerializable.js';
 import { MaskedPredicate } from '../../src/predicate/MaskedPredicate.js';
 import { PredicateFactory } from '../../src/predicate/PredicateFactory.js';
 import { StateTransitionClient } from '../../src/StateTransitionClient.js';
+import { AggregatorClient } from '../../src/api/AggregatorClient.js';
 import { CoinId } from '../../src/token/fungible/CoinId.js';
 import { TokenCoinData } from '../../src/token/fungible/TokenCoinData.js';
 import { ITokenJson, Token } from '../../src/token/Token.js';
-import { TokenFactory } from '../../src/token/TokenFactory.js';
+import { SplitProof, TokenFactory, Uint8ArrayTokenData } from '../../src/token/TokenFactory.js';
 import { TokenId } from '../../src/token/TokenId.js';
 import { TokenState } from '../../src/token/TokenState.js';
 import { TokenType } from '../../src/token/TokenType.js';
@@ -36,7 +37,7 @@ const textEncoder = new TextEncoder();
 interface IMintTokenData {
   tokenId: TokenId;
   tokenType: TokenType;
-  tokenData: TestTokenData;
+  tokenData: Uint8ArrayTokenData;
   coinData: TokenCoinData;
   data: Uint8Array;
   salt: Uint8Array;
@@ -94,7 +95,7 @@ async function waitInclusionProof(
 async function createMintTokenData(secret: Uint8Array, coinData: TokenCoinData): Promise<IMintTokenData> {
   const tokenId = TokenId.create(crypto.getRandomValues(new Uint8Array(32)));
   const tokenType = TokenType.create(crypto.getRandomValues(new Uint8Array(32)));
-  const tokenData = new TestTokenData(crypto.getRandomValues(new Uint8Array(32)));
+  const tokenData = new Uint8ArrayTokenData(crypto.getRandomValues(new Uint8Array(32)));
   
   const data = crypto.getRandomValues(new Uint8Array(32));
 
@@ -122,7 +123,7 @@ async function createMintTokenData(secret: Uint8Array, coinData: TokenCoinData):
 }
 
 async function createMintTokenDataForSplit(tokenId: TokenId, secret: Uint8Array, tokenType: TokenType, coinData: TokenCoinData): Promise<IMintTokenData> {
-  const tokenData = new TestTokenData(crypto.getRandomValues(new Uint8Array(32)));
+  const tokenData = new Uint8ArrayTokenData(crypto.getRandomValues(new Uint8Array(32)));
 
   const data = crypto.getRandomValues(new Uint8Array(32));
 
@@ -335,16 +336,33 @@ describe('Transition', function () {
         FungibleTokenData
           ${alphaToken.toJSON()}: 15`);
 
+    console.log('******************************************* Split token 1 *******************************************');
+    console.log(exportFlow(splitTokens[0], null, true));
 
-    console.log('******************************************* Split tokens *******************************************');
-    console.log(splitTokens);
-  }, 15000);
+    console.log('******************************************* Split token 2 *******************************************');
+    console.log(exportFlow(splitTokens[1], null, true));
+
+    const newTokenJson = exportFlow(splitTokens[0], null, true);
+    const importedToken1 = await new TokenFactory(new PredicateFactory()).create(
+      JSON.parse(newTokenJson).token,
+      Uint8ArrayTokenData.fromJSON);
+  }, 150000);
+
+  // TODO: Should this function be moved into a different location in the library?
+  function exportFlow(token, transaction, pretify){
+    const flow = {token, transaction}
+    return pretify?JSON.stringify(flow, null, 4):JSON.stringify(flow);
+  }
 
   it('should import token and be able to send it', async () => {
     // Let's modify this test to use a more focused approach without relying on the full token JSON
     const client = new StateTransitionClient(new TestAggregatorClient(new SparseMerkleTree(HashAlgorithm.SHA256)));
     const secret = new TextEncoder().encode('secret');
-    const mintTokenData = await createMintTokenData(secret);
+    const coinData = new TokenCoinData([
+      [new CoinId(crypto.getRandomValues(new Uint8Array(32))), BigInt(Math.round(Math.random() * 90)) + 10n],
+      [new CoinId(crypto.getRandomValues(new Uint8Array(32))), BigInt(Math.round(Math.random() * 90)) + 10n],
+    ]);
+    const mintTokenData = await createMintTokenData(secret, coinData);
     
     // Create a token directly using the first test's approach since we know that works
     const mintCommitment = await client.submitMintTransaction(
@@ -389,125 +407,6 @@ describe('Transition', function () {
     console.log(token.toString());
   }, 15000);
 });
-
-class TestTokenData implements ISerializable {
-  public constructor(private readonly _data: Uint8Array) {
-    this._data = new Uint8Array(_data);
-  }
-
-  public get data(): Uint8Array {
-    return new Uint8Array(this._data);
-  }
-
-  public static fromJSON(data: unknown): Promise<TestTokenData> {
-    if (typeof data !== 'string') {
-      throw new Error('Invalid test token data');
-    }
-
-    return Promise.resolve(new TestTokenData(HexConverter.decode(data)));
-  }
-
-  public toJSON(): string {
-    return HexConverter.encode(this._data);
-  }
-
-  public toCBOR(): Uint8Array {
-    return this.data;
-  }
-
-  public toString(): string {
-    return dedent`
-      TestTokenData: ${HexConverter.encode(this.data)}`;
-  }
-}
-
-export interface ISplitProofJson {
-  burnedToken: ITokenJson;
-  burnProofsByCoinId: Array<[string, [IPathJson, ISumPathJson]]>;
-}
-
-export class SplitProof<TD extends ISerializable, MTD extends MintTransactionData<ISerializable | null>> implements ISerializable {
-  constructor(public readonly burnedToken: Token<TD, MTD>, public readonly burnProofsByCoinId: Map<string, [Path, SumPath]>) {
-  }
-
-  public toCBOR(): Uint8Array {
-    const encodedBurnProofEntries: Uint8Array[] = [];
-
-    for (const [coinId, proofs] of this.burnProofsByCoinId.entries()) {
-      const encodedEntry: Uint8Array = CborEncoder.encodeArray([
-        CborEncoder.encodeTextString(coinId),
-        CborEncoder.encodeArray([
-          proofs[0].toCBOR(),
-          proofs[1].toCBOR()
-        ])
-      ]);
-      encodedBurnProofEntries.push(encodedEntry);
-    }
-
-    return CborEncoder.encodeArray([
-      this.burnedToken.toCBOR(),
-      CborEncoder.encodeArray(encodedBurnProofEntries)
-    ]);
-  }
-
-  public toJSON(): ISplitProofJson {
-    const burnProofsArray: Array<[string, [IPathJson, ISumPathJson]]> = [];
-    for (const [coinId, proofs] of this.burnProofsByCoinId.entries()) {
-      burnProofsArray.push([
-        coinId,
-        [
-          proofs[0].toJSON(),
-          proofs[1].toJSON()
-        ]
-      ]);
-    }
-
-    return {
-      burnedToken: this.burnedToken.toJSON(),
-      burnProofsByCoinId: burnProofsArray,
-    };
-  }
-
-  public static fromJSON<TD extends ISerializable, MTD extends MintTransactionData<ISerializable | null>>(
-    json: ISplitProofJson, // Expects burnProofsByCoinId to be an array
-    hashOptions: HashOptions,
-    tokenDeserializer: (tokenJson: any) => Token<TD, MTD>
-  ): SplitProof<TD, MTD> {
-    if (typeof json !== 'object' || json === null) {
-      throw new Error('Invalid JSON data for SplitProof: input is not an object.');
-    }
-    if (typeof json.burnedToken === 'undefined') {
-      throw new Error('Invalid JSON data for SplitProof: missing burnedToken.');
-    }
-    if (!Array.isArray(json.burnProofsByCoinId)) { // Check if it's an array
-      throw new Error('Invalid JSON data for SplitProof: burnProofsByCoinId is not an array.');
-    }
-
-    const deserializedToken = tokenDeserializer(json.burnedToken);
-
-    const deserializedBurnProofs = new Map<string, [Path, SumPath]>();
-    for (const entry of json.burnProofsByCoinId) {
-      if (!Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== 'string') {
-        throw new Error('Invalid JSON data for SplitProof: malformed entry in burnProofsByCoinId array.');
-      }
-      const coinId = entry[0];
-      const proofPairJson = entry[1];
-
-      if (!Array.isArray(proofPairJson) || proofPairJson.length !== 2) {
-        throw new Error(`Invalid JSON data for SplitProof: proof pair for coinId ${coinId} is not a 2-element array.`);
-      }
-      const path = Path.fromJSON(proofPairJson[0], hashOptions);
-      const sumPath = SumPath.fromJSON(proofPairJson[1], hashOptions);
-      deserializedBurnProofs.set(coinId, [path, sumPath]); // Order of insertion into Map is preserved
-    }
-
-    return new SplitProof<TD, MTD>(deserializedToken, deserializedBurnProofs);
-  }
-
-  public toString(): string {
-    return this.burnedToken.toString();
-  }
-}
 
 export async function sha256(value: Uint8Array): Promise<Uint8Array<ArrayBufferLike>> {
   return (await new NodeDataHasher(HashAlgorithm.SHA256).update(value).digest()).data;
