@@ -8,17 +8,26 @@ import { IMintTransactionDataJson, MintTransactionData } from './MintTransaction
 import { ITransactionDataDto, TransactionData } from './TransactionData.js';
 import { ISerializable } from '../ISerializable.js';
 
+/** DTO used when serialising a transaction. */
 export interface ITransactionDto<T extends ITransactionDataDto | IMintTransactionDataJson> {
   readonly data: T;
   readonly inclusionProof: IInclusionProofJson;
 }
 
+/**
+ * A transaction along with its verified inclusion proof.
+ */
 export class Transaction<T extends TransactionData | MintTransactionData<ISerializable | null>> {
+  /**
+   * @param data           Transaction data payload
+   * @param inclusionProof Proof of inclusion in the ledger
+   */
   public constructor(
     public readonly data: T,
     public readonly inclusionProof: InclusionProof,
   ) {}
 
+  /** Serialise transaction and proof to JSON. */
   public toJSON(): ITransactionDto<ITransactionDataDto | IMintTransactionDataJson> {
     return {
       data: this.data.toJSON(),
@@ -26,10 +35,14 @@ export class Transaction<T extends TransactionData | MintTransactionData<ISerial
     };
   }
 
+  /** Encode transaction and proof to CBOR. */
   public toCBOR(): Uint8Array {
     return CborEncoder.encodeArray([this.data.toCBOR(), this.inclusionProof.toCBOR()]);
   }
 
+  /**
+   * Verify if the provided data matches the optional data hash.
+   */
   public async containsData(data: Uint8Array | null): Promise<boolean> {
     if (this.data.dataHash) {
       if (!data) {
@@ -44,6 +57,7 @@ export class Transaction<T extends TransactionData | MintTransactionData<ISerial
     return !data;
   }
 
+  /** Multi-line debug description. */
   public toString(): string {
     return dedent`
         Transaction:

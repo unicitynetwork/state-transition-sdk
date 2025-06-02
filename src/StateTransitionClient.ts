@@ -22,13 +22,54 @@ import { Transaction } from './transaction/Transaction.js';
 import { TransactionData } from './transaction/TransactionData.js';
 
 // TOKENID string SHA-256 hash
+/**
+ * Constant suffix used when deriving the mint request identifier.
+ */
 export const MINT_SUFFIX = HexConverter.decode('9e82002c144d7c5796c50f6db50a0c7bbd7f717ae3af6c6c71a3e9eba3022730');
 // I_AM_UNIVERSAL_MINTER_FOR_ string bytes
+/**
+ * Secret prefix for the universal minter used internally when minting tokens.
+ */
 export const MINTER_SECRET = HexConverter.decode('495f414d5f554e4956455253414c5f4d494e5445525f464f525f');
 
+/**
+ * High level client implementing the token state transition workflow.
+ */
 export class StateTransitionClient {
+  /**
+   * @param client Implementation used to talk to an aggregator
+   */
   public constructor(private readonly client: IAggregatorClient) {}
 
+  /**
+   * Create and submit a mint transaction for a new token.
+   *
+   * @typeParam R Type of the optional reason object
+   * @param recipient Address of the initial token owner
+   * @param tokenId   Unique identifier for the token
+   * @param tokenType Token type identifier
+   * @param tokenData Serialized token payload
+   * @param coinData  Fungible coin balance
+   * @param salt      Unique salt used in the predicate
+   * @param dataHash  Optional hash pointing to additional data
+   * @param reason    Optional reason object attached to the mint
+   * @returns Commitment containing the transaction data and authenticator
+   * @throws Error when the aggregator rejects the transaction
+   *
+   * @example
+   * ```ts
+   * const commitment = await client.submitMintTransaction(
+   *   recipientAddress,
+   *   tokenId,
+   *   tokenType,
+   *   tokenData,
+   *   coinData,
+   *   salt,
+   *   null,
+   *   null
+   * );
+   * ```
+   */
   public async submitMintTransaction<R extends ISerializable | null>(
     recipient: DirectAddress,
     tokenId: TokenId,
@@ -67,6 +108,19 @@ export class StateTransitionClient {
     return new Commitment(requestId, transactionData, authenticator);
   }
 
+  /**
+   * Submit a state transition for an existing token.
+   *
+   * @param transactionData Data describing the transition
+   * @param signingService   Signing service for the current owner
+   * @returns Commitment ready for inclusion proof retrieval
+   * @throws Error if ownership verification fails or aggregator rejects
+   *
+   * @example
+   * ```ts
+   * const commitment = await client.submitTransaction(data, signingService);
+   * ```
+   */
   public async submitTransaction(
     transactionData: TransactionData,
     signingService: SigningService,
@@ -91,6 +145,19 @@ export class StateTransitionClient {
     return new Commitment(requestId, transactionData, authenticator);
   }
 
+  /**
+   * Build a {@link Transaction} object once an inclusion proof is obtained.
+   *
+   * @param param0       Commitment returned from submit* methods
+   * @param inclusionProof Proof of inclusion from the aggregator
+   * @returns Constructed transaction object
+   * @throws Error if the inclusion proof is invalid
+   *
+   * @example
+   * ```ts
+   * const tx = await client.createTransaction(commitment, inclusionProof);
+   * ```
+   */
   public async createTransaction<T extends TransactionData | MintTransactionData<ISerializable | null>>(
     { requestId, transactionData }: Commitment<T>,
     inclusionProof: InclusionProof,
@@ -111,6 +178,21 @@ export class StateTransitionClient {
     return new Transaction(transactionData, inclusionProof);
   }
 
+  /**
+   * Finalise a transaction and produce the next token state.
+   *
+   * @param token           Token being transitioned
+   * @param state           New state after the transition
+   * @param transaction     Transaction proving the state change
+   * @param nametagTokens   Optional name tag tokens associated with the transfer
+   * @returns Updated token instance
+   * @throws Error if validation checks fail
+   *
+   * @example
+   * ```ts
+   * const updated = await client.finishTransaction(token, state, tx);
+   * ```
+   */
   public async finishTransaction<TD extends ISerializable, MDT extends MintTransactionData<ISerializable | null>>(
     token: Token<TD, MDT>,
     state: TokenState,
@@ -137,6 +219,18 @@ export class StateTransitionClient {
     return new Token(token.id, token.type, token.data, token.coins, state, transactions, nametagTokens);
   }
 
+  /**
+   * Query the ledger to see if the token's current state has been spent.
+   *
+   * @param token     Token to check
+   * @param publicKey Public key of the owner
+   * @returns Verification status reported by the aggregator
+   *
+   * @example
+   * ```ts
+   * const status = await client.getTokenStatus(token, ownerPublicKey);
+   * ```
+   */
   public async getTokenStatus(
     token: Token<ISerializable, MintTransactionData<ISerializable | null>>,
     publicKey: Uint8Array,
@@ -147,6 +241,14 @@ export class StateTransitionClient {
     return inclusionProof.verify(requestId.toBigInt());
   }
 
+  /**
+   * Convenience helper to retrieve the inclusion proof for a commitment.
+   *
+   * @example
+   * ```ts
+   * const proof = await client.getInclusionProof(commitment);
+   * ```
+   */
   public getInclusionProof(
     commitment: Commitment<TransactionData | MintTransactionData<ISerializable | null>>,
   ): Promise<InclusionProof> {

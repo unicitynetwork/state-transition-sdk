@@ -17,19 +17,31 @@ interface IPredicateJson {
   readonly nonce: string;
 }
 
+/**
+ * Predicate representing a permanently burned token.
+ */
 export class BurnPredicate implements IPredicate {
   public readonly type: PredicateType = TYPE;
 
+  /**
+   * @param reference Reference hash identifying the predicate
+   * @param hash      Unique hash of the predicate and token
+   * @param _nonce    Nonce used to ensure uniqueness
+   */
   private constructor(
     public readonly reference: DataHash,
     public readonly hash: DataHash,
     private readonly _nonce: Uint8Array,
   ) {}
 
+  /** Nonce used when creating the predicate. */
   public get nonce(): Uint8Array {
     return new Uint8Array(this._nonce);
   }
 
+  /**
+   * Construct a new burn predicate for the given token.
+   */
   public static async create(tokenId: TokenId, tokenType: TokenType, nonce: Uint8Array): Promise<BurnPredicate> {
     const reference = await BurnPredicate.calculateReference(tokenType);
     const hash = await BurnPredicate.calculateHash(reference, tokenId, nonce);
@@ -37,6 +49,9 @@ export class BurnPredicate implements IPredicate {
     return new BurnPredicate(reference, hash, nonce);
   }
 
+  /**
+   * Parse a burn predicate from JSON.
+   */
   public static async fromJSON(tokenId: TokenId, tokenType: TokenType, data: unknown): Promise<BurnPredicate> {
     if (!BurnPredicate.isJSON(data)) {
       throw new Error('Invalid burn predicate json');
@@ -49,6 +64,9 @@ export class BurnPredicate implements IPredicate {
     return new BurnPredicate(reference, hash, nonce);
   }
 
+  /**
+   * Calculate the predicate reference from the token type.
+   */
   public static calculateReference(tokenType: TokenType): Promise<DataHash> {
     return new DataHasher(HashAlgorithm.SHA256)
       .update(CborEncoder.encodeArray([CborEncoder.encodeTextString(TYPE), tokenType.toCBOR()]))
@@ -65,6 +83,9 @@ export class BurnPredicate implements IPredicate {
       .digest();
   }
 
+  /**
+   * Serialise the predicate to a JSON object.
+   */
   public toJSON(): IPredicateJson {
     return {
       nonce: HexConverter.encode(this._nonce),
@@ -72,20 +93,28 @@ export class BurnPredicate implements IPredicate {
     };
   }
 
+  /**
+   * Encode the predicate as CBOR for hashing.
+   */
   public toCBOR(): Uint8Array {
     return CborEncoder.encodeArray([CborEncoder.encodeTextString(this.type)]);
   }
 
+  /**
+   * Burn predicates are never valid for verification.
+   */
   public verify(): Promise<boolean> {
     return Promise.resolve(false);
   }
 
+  /** Human readable representation. */
   public toString(): string {
     return dedent`
           Predicate[${this.type}]:
             Hash: ${this.hash.toString()}`;
   }
 
+  /** Burn predicate can never be owned. */
   public isOwner(): Promise<boolean> {
     return Promise.resolve(false);
   }

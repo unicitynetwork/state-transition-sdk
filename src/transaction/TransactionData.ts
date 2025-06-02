@@ -9,6 +9,7 @@ import { NameTagToken } from '../token/NameTagToken.js';
 import { ITokenJson } from '../token/Token.js';
 import { ITokenStateJson, TokenState } from '../token/TokenState.js';
 
+/** JSON representation of a {@link TransactionData}. */
 export interface ITransactionDataDto {
   readonly sourceState: ITokenStateJson;
   readonly recipient: string;
@@ -18,7 +19,19 @@ export interface ITransactionDataDto {
   readonly nameTags: ITokenJson[];
 }
 
+/**
+ * Data describing a standard token transfer.
+ */
 export class TransactionData {
+  /**
+   * @param hash        Hash of the encoded data
+   * @param sourceState Previous token state
+   * @param recipient   Address of the new owner
+   * @param salt        Salt used in the new predicate
+   * @param dataHash    Optional additional data hash
+   * @param _message    Optional message bytes
+   * @param nameTags    Optional name tag tokens
+   */
   private constructor(
     public readonly hash: DataHash,
     public readonly sourceState: TokenState,
@@ -32,14 +45,17 @@ export class TransactionData {
     this.nameTags = Array.from(nameTags);
   }
 
+  /** Optional message attached to the transfer. */
   public get message(): Uint8Array | null {
     return this._message ? new Uint8Array(this._message) : null;
   }
 
+  /** Hash algorithm for the data hash. */
   public get hashAlgorithm(): HashAlgorithm {
     return this.hash.algorithm;
   }
 
+  /** Construct a new transaction data object. */
   public static async create(
     state: TokenState,
     recipient: string,
@@ -69,6 +85,7 @@ export class TransactionData {
     );
   }
 
+  /** Serialise to JSON. */
   public toJSON(): ITransactionDataDto {
     return {
       dataHash: this.dataHash?.toJSON() ?? null,
@@ -80,6 +97,7 @@ export class TransactionData {
     };
   }
 
+  /** Encode as CBOR byte array. */
   public toCBOR(): Uint8Array {
     return CborEncoder.encodeArray([
       this.sourceState.toCBOR(),
@@ -91,6 +109,7 @@ export class TransactionData {
     ]);
   }
 
+  /** Multi-line debug output. */
   public toString(): string {
     return dedent`
       TransactionData:

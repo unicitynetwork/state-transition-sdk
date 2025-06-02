@@ -11,6 +11,7 @@ import { TokenCoinData } from '../token/fungible/TokenCoinData.js';
 import { TokenId } from '../token/TokenId.js';
 import { TokenType } from '../token/TokenType.js';
 
+/** JSON representation of {@link MintTransactionData}. */
 export interface IMintTransactionDataJson {
   readonly recipient: string;
   readonly salt: string;
@@ -18,7 +19,18 @@ export interface IMintTransactionDataJson {
   readonly reason: unknown | null;
 }
 
+/**
+ * Data object describing a token mint operation.
+ */
 export class MintTransactionData<R extends ISerializable | null> {
+  /**
+   * @param hash        Hash of the encoded transaction
+   * @param sourceState Pseudo input state used for the mint
+   * @param recipient   Address of the first owner
+   * @param _salt       Random salt used to derive predicates
+   * @param dataHash    Optional metadata hash
+   * @param reason      Optional reason object
+   */
   private constructor(
     public readonly hash: DataHash,
     public readonly sourceState: RequestId,
@@ -30,14 +42,19 @@ export class MintTransactionData<R extends ISerializable | null> {
     this._salt = new Uint8Array(_salt);
   }
 
+  /** Salt used during predicate creation. */
   public get salt(): Uint8Array {
     return new Uint8Array(this._salt);
   }
 
+  /** Hash algorithm of the transaction hash. */
   public get hashAlgorithm(): HashAlgorithm {
     return this.hash.algorithm;
   }
 
+  /**
+   * Construct a new mint transaction.
+   */
   public static async create<R extends ISerializable | null>(
     tokenId: TokenId,
     tokenType: TokenType,
@@ -73,6 +90,7 @@ export class MintTransactionData<R extends ISerializable | null> {
     );
   }
 
+  /** Convert to JSON representation. */
   public toJSON(): IMintTransactionDataJson {
     return {
       dataHash: this.dataHash?.toJSON() ?? null,
@@ -82,6 +100,7 @@ export class MintTransactionData<R extends ISerializable | null> {
     };
   }
 
+  /** Serialise this object using CBOR. */
   public toCBOR(): Uint8Array {
     return CborEncoder.encodeArray([
       CborEncoder.encodeTextString(this.recipient),
@@ -91,6 +110,7 @@ export class MintTransactionData<R extends ISerializable | null> {
     ]);
   }
 
+  /** Multiline debug representation. */
   public toString(): string {
     return dedent`
       MintTransactionData:

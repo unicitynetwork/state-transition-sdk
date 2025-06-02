@@ -11,8 +11,12 @@ import { ITransactionDto, Transaction } from '../transaction/Transaction.js';
 import { ITransactionDataDto, TransactionData } from '../transaction/TransactionData.js';
 import { TokenCoinData, TokenCoinDataJson } from './fungible/TokenCoinData.js';
 
+/** Current serialization version for tokens. */
 export const TOKEN_VERSION = '2.0';
 
+/**
+ * JSON representation of a {@link Token}.
+ */
 export interface ITokenJson {
   readonly version: string;
   readonly id: string;
@@ -24,7 +28,13 @@ export interface ITokenJson {
   readonly nametagTokens: ITokenJson[];
 }
 
+/**
+ * In-memory representation of a token including its transaction history.
+ */
 export class Token<TD extends ISerializable, MTD extends MintTransactionData<ISerializable | null>> {
+  /**
+   * Create a new token instance.
+   */
   public constructor(
     public readonly id: TokenId,
     public readonly type: TokenType,
@@ -39,14 +49,17 @@ export class Token<TD extends ISerializable, MTD extends MintTransactionData<ISe
     this._transactions = [..._transactions];
   }
 
+  /** Nametag tokens associated with this token. */
   public get nametagTokens(): NameTagToken[] {
     return [...this._nametagTokens];
   }
 
+  /** History of all transactions starting with the mint transaction. */
   public get transactions(): [Transaction<MTD>, ...Transaction<TransactionData>[]] {
     return [...this._transactions];
   }
 
+  /** Serialise this token to JSON. */
   public toJSON(): ITokenJson {
     return {
       coins: this.coins?.toJSON() ?? null,
@@ -63,6 +76,7 @@ export class Token<TD extends ISerializable, MTD extends MintTransactionData<ISe
     };
   }
 
+  /** Encode the token using CBOR for hashing or storage. */
   public toCBOR(): Uint8Array {
     return CborEncoder.encodeArray([
       this.id.toCBOR(),
@@ -76,6 +90,7 @@ export class Token<TD extends ISerializable, MTD extends MintTransactionData<ISe
     ]);
   }
 
+  /** Human readable multi-line representation. */
   public toString(): string {
     return dedent`
         Token[${this.version}]:

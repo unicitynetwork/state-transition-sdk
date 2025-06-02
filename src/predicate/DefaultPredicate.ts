@@ -21,7 +21,19 @@ interface IPredicateJson {
   readonly nonce: string;
 }
 
+/**
+ * Base predicate containing common verification logic for key-based predicates.
+ */
 export abstract class DefaultPredicate implements IPredicate {
+  /**
+   * @param type          Predicate type value
+   * @param _publicKey    Public key able to sign transactions
+   * @param algorithm     Signing algorithm name
+   * @param hashAlgorithm Hash algorithm used for hashing operations
+   * @param _nonce        Nonce providing uniqueness
+   * @param reference     Reference hash of the predicate
+   * @param hash          Hash of the predicate with a specific token
+   */
   protected constructor(
     public readonly type: PredicateType.MASKED | PredicateType.UNMASKED,
     private readonly _publicKey: Uint8Array,
@@ -35,14 +47,17 @@ export abstract class DefaultPredicate implements IPredicate {
     this._nonce = new Uint8Array(_nonce);
   }
 
+  /** Public key associated with the predicate. */
   public get publicKey(): Uint8Array {
     return this._publicKey;
   }
 
+  /** Nonce originally used to create the predicate. */
   public get nonce(): Uint8Array {
     return this._nonce;
   }
 
+  /** Validate a JSON object representing a predicate. */
   public static isJSON(data: unknown): data is IPredicateJson {
     return (
       typeof data === 'object' &&
@@ -58,6 +73,7 @@ export abstract class DefaultPredicate implements IPredicate {
     );
   }
 
+  /** Serialise the predicate to JSON. */
   public toJSON(): IPredicateJson {
     return {
       algorithm: this.algorithm,
@@ -68,6 +84,7 @@ export abstract class DefaultPredicate implements IPredicate {
     };
   }
 
+  /** Encode the predicate as a CBOR byte array. */
   public toCBOR(): Uint8Array {
     return CborEncoder.encodeArray([
       CborEncoder.encodeTextString(this.type),
@@ -78,6 +95,9 @@ export abstract class DefaultPredicate implements IPredicate {
     ]);
   }
 
+  /**
+   * Verify a transaction against this predicate.
+   */
   public async verify(
     transaction: Transaction<MintTransactionData<ISerializable> | TransactionData>,
   ): Promise<boolean> {
@@ -104,6 +124,7 @@ export abstract class DefaultPredicate implements IPredicate {
     return status === InclusionProofVerificationStatus.OK;
   }
 
+  /** Human readable description of the predicate. */
   public toString(): string {
     return dedent`
           Predicate[${this.type}]:
@@ -114,6 +135,7 @@ export abstract class DefaultPredicate implements IPredicate {
             Hash: ${this.hash.toString()}`;
   }
 
+  /** Check if the supplied public key matches the predicate owner. */
   public isOwner(publicKey: Uint8Array): Promise<boolean> {
     return Promise.resolve(HexConverter.encode(publicKey) === HexConverter.encode(this.publicKey));
   }

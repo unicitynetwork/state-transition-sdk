@@ -13,7 +13,18 @@ import { TokenType } from '../token/TokenType.js';
 
 const TYPE = PredicateType.UNMASKED;
 
+/**
+ * Predicate where the nonce value is revealed in clear text.
+ */
 export class UnmaskedPredicate extends DefaultPredicate {
+  /**
+   * @param publicKey     Owner public key
+   * @param algorithm     Signing algorithm
+   * @param hashAlgorithm Algorithm used to hash predicate data
+   * @param nonce         Nonce value used during creation
+   * @param reference     Predicate reference
+   * @param hash          Predicate hash
+   */
   private constructor(
     publicKey: Uint8Array,
     algorithm: string,
@@ -25,6 +36,9 @@ export class UnmaskedPredicate extends DefaultPredicate {
     super(TYPE, publicKey, algorithm, hashAlgorithm, nonce, reference, hash);
   }
 
+  /**
+   * Create a new unmasked predicate for the given owner.
+   */
   public static async create(
     tokenId: TokenId,
     tokenType: TokenType,
@@ -54,6 +68,9 @@ export class UnmaskedPredicate extends DefaultPredicate {
     );
   }
 
+  /**
+   * Import an unmasked predicate from JSON.
+   */
   public static async fromJSON(tokenId: TokenId, tokenType: TokenType, data: unknown): Promise<DefaultPredicate> {
     if (!DefaultPredicate.isJSON(data)) {
       throw new Error('Invalid one time address predicate json');
@@ -73,6 +90,9 @@ export class UnmaskedPredicate extends DefaultPredicate {
     return new UnmaskedPredicate(publicKey, data.algorithm, data.hashAlgorithm, nonce, reference, hash);
   }
 
+  /**
+   * Calculate the reference for the given parameters.
+   */
   public static calculateReference(
     tokenType: TokenType,
     algorithm: string,
@@ -92,6 +112,7 @@ export class UnmaskedPredicate extends DefaultPredicate {
       .digest();
   }
 
+  /** Compute the predicate hash including the nonce. */
   private static calculateHash(reference: DataHash, tokenId: TokenId, nonce: Uint8Array): Promise<DataHash> {
     return new DataHasher(HashAlgorithm.SHA256)
       .update(CborEncoder.encodeArray([reference.toCBOR(), tokenId.toCBOR(), CborEncoder.encodeByteString(nonce)]))

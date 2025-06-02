@@ -7,12 +7,21 @@ import { dedent } from '@unicitylabs/commons/lib/util/StringUtils.js';
 
 import { IPredicate, IPredicateJson } from '../predicate/IPredicate.js';
 
+/** JSON representation of {@link TokenState}. */
 export interface ITokenStateJson {
   readonly unlockPredicate: IPredicateJson;
   readonly data: string | null;
 }
 
+/**
+ * Represents a snapshot of token ownership and associated data.
+ */
 export class TokenState {
+  /**
+   * @param unlockPredicate Predicate controlling future transfers
+   * @param _data           Optional encrypted state data
+   * @param hash            Hash of predicate and data
+   */
   private constructor(
     public readonly unlockPredicate: IPredicate,
     private readonly _data: Uint8Array | null,
@@ -21,14 +30,19 @@ export class TokenState {
     this._data = _data ? new Uint8Array(_data) : null;
   }
 
+  /** Copy of the stored state data. */
   public get data(): Uint8Array | null {
     return this._data ? new Uint8Array(this._data) : null;
   }
 
+  /** Hash algorithm used for the state hash. */
   public get hashAlgorithm(): HashAlgorithm {
     return this.hash.algorithm;
   }
 
+  /**
+   * Compute a new token state from predicate and optional data.
+   */
   public static async create(unlockPredicate: IPredicate, data: Uint8Array | null): Promise<TokenState> {
     return new TokenState(
       unlockPredicate,
@@ -44,6 +58,7 @@ export class TokenState {
     );
   }
 
+  /** Serialise the state to JSON. */
   public toJSON(): ITokenStateJson {
     return {
       data: this._data ? HexConverter.encode(this._data) : null,
@@ -51,6 +66,7 @@ export class TokenState {
     };
   }
 
+  /** Encode the state as CBOR. */
   public toCBOR(): Uint8Array {
     return CborEncoder.encodeArray([
       this.unlockPredicate.toCBOR(),
@@ -58,6 +74,7 @@ export class TokenState {
     ]);
   }
 
+  /** Human readable form for debugging. */
   public toString(): string {
     return dedent`
         TokenState:
