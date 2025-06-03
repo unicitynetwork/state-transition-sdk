@@ -15,6 +15,10 @@ export class TokenType {
     return new TokenType(id);
   }
 
+  public static fromJSON(json: string): TokenType {
+    return new TokenType(HexConverter.decode(json));
+  }
+
   /** Raw bytes of the token type. */
   public encode(): Uint8Array {
     return new Uint8Array(this._id);

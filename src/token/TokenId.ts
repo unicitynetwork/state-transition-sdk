@@ -17,6 +17,10 @@ export class TokenId {
     return new TokenId(id);
   }
 
+  public static fromJSON(json: string): TokenId {
+    return new TokenId(HexConverter.decode(json));
+  }
+
   /** Encode as a hex string for JSON. */
   public toJSON(): string {
     return HexConverter.encode(this._id);
