@@ -24,8 +24,7 @@ import { DataHasherFactory } from '@unicitylabs/commons/lib/hash/DataHasherFacto
 import { NodeDataHasher } from '@unicitylabs/commons/lib/hash/NodeDataHasher.js';
 import { BigintConverter } from '@unicitylabs/commons/lib/util/BigintConverter.js';
 import { BurnPredicate, BurnReason } from './predicate/BurnPredicate.js';
-import { SumLeaf, SMT, SumTree, Path, SumPath, IPathJson, ISumPathJson } from '@unicitylabs/prefix-hash-tree/lib/index.js';
-import { Leaf } from '@unicitylabs/prefix-hash-tree/lib/types/index.js';
+import { Leaf, SumLeaf, SMT, SumTree, Path, SumPath, IPathJson, ISumPathJson } from '@unicitylabs/prefix-hash-tree';
 
 // TOKENID string SHA-256 hash
 export const MINT_SUFFIX = HexConverter.decode('9e82002c144d7c5796c50f6db50a0c7bbd7f717ae3af6c6c71a3e9eba3022730');

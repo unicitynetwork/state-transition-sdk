@@ -17,9 +17,7 @@ import { ITransactionDto, Transaction } from '../transaction/Transaction.js';
 import { ITransactionDataDto, TransactionData } from '../transaction/TransactionData.js';
 import { TokenCoinData } from './fungible/TokenCoinData.js';
 import { CborEncoder } from '@unicitylabs/commons/lib/cbor/CborEncoder.js';
-import { IPathJson, ISumPathJson } from '@unicitylabs/prefix-hash-tree/lib/index.js';
-import { Path, HashOptions } from '@unicitylabs/prefix-hash-tree/lib/smt.js';
-import { SumPath } from '@unicitylabs/prefix-hash-tree/lib/sumtree.js';
+import { Path, SumPath, IPathJson, ISumPathJson, HashOptions } from '@unicitylabs/prefix-hash-tree';
 import { DataHasherFactory } from '@unicitylabs/commons/lib/hash/DataHasherFactory.js';
 import { HashAlgorithm } from '@unicitylabs/commons/lib/hash/HashAlgorithm.js';
 import { NodeDataHasher } from '@unicitylabs/commons/lib/hash/NodeDataHasher.js';
@@ -32,7 +30,7 @@ export enum MintReasonType {
   TOKEN_SPLIT = 'TOKEN_SPLIT'
 }
 
-const hashOptions = { 
+const hashOptions: HashOptions = {
   dataHasherFactory: new DataHasherFactory(NodeDataHasher),
   algorithm: HashAlgorithm.SHA256
 };
@@ -209,7 +207,7 @@ export class TokenFactory {
       const splitProof: SplitProof<Uint8ArrayTokenData, MintTransactionData<ISerializable>> = transaction.data.reason;
       for (let [coinId, [path, sumPath]] of splitProof.burnProofsByCoinId) {
         coinIds.push(coinId);
-        
+
         if (!await path.provesInclusionAt(BigintConverter.decode(HexConverter.decode(coinId)))) {
           return false;
         }
