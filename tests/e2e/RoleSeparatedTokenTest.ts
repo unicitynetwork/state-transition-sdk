@@ -175,7 +175,11 @@ describe('Role Separated Token Transfer', function () {
   });
 
   it('Alice mints → Bob receives → Carol receives and verifies complete history', async () => {
-    const aggregatorUrl = process.env.AGGREGATOR_URL ?? 'http://127.0.0.1:80';
+    const aggregatorUrl = process.env.AGGREGATOR_URL;
+    if (!aggregatorUrl) {
+        console.warn('Skipping test: AGGREGATOR_URL environment variable is not set');
+        return;
+    }
     console.log('connecting to aggregator url: ' + aggregatorUrl);
     const client = new StateTransitionClient(new AggregatorClient(aggregatorUrl));
 
