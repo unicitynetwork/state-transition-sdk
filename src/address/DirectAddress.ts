@@ -28,7 +28,7 @@ export class DirectAddress implements IAddress {
   }
 
   /**
-   * {@inheritDoc IAddress.scheme}
+   * @inheritDoc
    */
   public get scheme(): AddressScheme {
     return AddressScheme.DIRECT;

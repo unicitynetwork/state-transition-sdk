@@ -109,9 +109,15 @@ export class TokenFactory {
   }
 
   /**
-   * Build a mint transaction object from serialized data.
+   * Create a mint transaction from JSON.
+   * @param tokenId Token identifier
+   * @param tokenType Type of the token
+   * @param tokenData Immutable token data object
+   * @param coinData Fungible coin data, or null if none
+   * @param sourceState Mint source state
+   * @param transaction JSON representation of the mint transaction
    */
-  public async createMintTransaction(
+  private async createMintTransaction(
     tokenId: TokenId,
     tokenType: TokenType,
     tokenData: ISerializable,
@@ -149,7 +155,12 @@ export class TokenFactory {
   }
 
   /**
-   * Internal helper to reconstruct a normal transaction from JSON.
+   * Create a transaction from JSON data.
+   * @param tokenId Token identifier
+   * @param tokenType Token type
+   * @param data Transaction data to deserialize
+   * @param inclusionProof Transaction inclusion proof
+   * @private
    */
   private async createTransaction(
     tokenId: TokenId,
@@ -172,7 +183,12 @@ export class TokenFactory {
     );
   }
 
-  /** Validate a mint transaction against a public key. */
+  /**
+   * Verify a mint transaction integrity and validate against public key.
+   * @param transaction Mint transaction
+   * @param publicKey Public key of the minter
+   * @private
+   */
   private async verifyMintTransaction(
     transaction: Transaction<MintTransactionData<ISerializable | null>>,
     publicKey: Uint8Array,
