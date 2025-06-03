@@ -26,25 +26,42 @@ npm install @unicitylabs/state-transition-sdk
 
 ### Basic Usage
 
+Minting
 ```typescript
-import { 
-  StateTransitionClient, 
-  AggregatorClient, 
-  Token, 
-  TokenType,
-  DirectAddress,
-  UnmaskedPredicate 
-} from '@unicitylabs/state-transition-sdk';
-
 // Create aggregator client
 const aggregatorClient = new AggregatorClient('https://gateway-test1.unicity.network:443');
 const client = new StateTransitionClient(aggregatorClient);
 
-// Mint a new token
-const mintData = await client.submitMintTransaction(/* mint parameters */);
+const commitment = await client.submitMintTransaction(/* mint parameters */);
+// Since submit takes time, inclusion proof might not be immediately available
+const inclusionProof = await client.getInclusionProof(commitment);
+const mintTransaction = await client.createTransaction(commitment, inclusionProof);
+
+// Create token from transaction
+const token = new Token(
+  data.tokenId,
+  data.tokenType,
+  data.tokenData,
+  data.coinData,
+  await TokenState.create(data.predicate, data.data),
+  [mintTransaction],
+);
+```
+
+Transfer
+```typescript
+// Create aggregator client
+const aggregatorClient = new AggregatorClient('https://gateway-test1.unicity.network:443');
+const client = new StateTransitionClient(aggregatorClient);
 
 // Transfer token to recipient
-const transaction = await client.submitTransaction(/* transfer parameters */);
+const commitment = await client.submitTransaction(/* transfer parameters */);
+// Since submit takes time, inclusion proof might not be immediately available
+const inclusionProof = await client.getInclusionProof(commitment);
+const transaction = await client.createTransaction(commitment, inclusionProof);
+
+// Recipient takes transaction and finishes it
+await client.finishTransaction(/* transaction parameters */);
 ```
 
 ## Core Components
@@ -53,8 +70,8 @@ const transaction = await client.submitTransaction(/* transfer parameters */);
 
 The main SDK interface for token operations:
 
-- `submitMintTransaction()` - Create new tokens
-- `submitTransaction()` - Submit state transitions
+- `submitMintTransaction()` - Create mint commitment
+- `submitTransaction()` - Create transfer commitment
 - `createTransaction()` - Create transactions from commitments
 - `finishTransaction()` - Complete token transfers
 - `getTokenStatus()` - Check token status via inclusion proofs
@@ -62,13 +79,15 @@ The main SDK interface for token operations:
 ### Address System
 
 **DirectAddress**: Cryptographic addresses with checksums for immediate ownership
+
+To use address sent by someone:
 ```typescript
-const address = new DirectAddress(publicKey, checksum);
+const address = await DirectAddress.fromJSON('DIRECT://582200004d8489e2b1244335ad8784a23826228e653658a2ecdb0abc17baa143f4fe560d9c81365b');
 ```
 
-**NameTagAddress**: Proxy addresses for indirect addressing
+To use address for minting or to send it someone, reference from predicate is needed:
 ```typescript
-const address = new NameTagAddress(nameTag);
+const address = await DirectAddress.create(data.predicate.reference);
 ```
 
 ### Predicate System
@@ -81,10 +100,16 @@ Predicates define unlock conditions for tokens:
 
 ```typescript
 // Create an unmasked predicate for direct ownership
-const predicate = new UnmaskedPredicate(publicKey, signature);
+const unmaskedPredicate = UnmaskedPredicate.create(token.id, token.type, signingService, HashAlgorithm.SHA256, salt);
 
 // Create a masked predicate for privacy
-const predicate = new MaskedPredicate(hashedPublicKey, commitment);
+const maskedPredicate = await MaskedPredicate.create(
+  token.id,
+  token.type,
+  signingService,
+  HashAlgorithm.SHA256,
+  nonce,
+);
 ```
 
 ### Token Types
@@ -96,24 +121,11 @@ const tokenData = new TokenCoinData([
 ]);
 ```
 
-**Name-Tag Tokens**: Special tokens for name-tag addressing
-```typescript
-const token = new NameTagToken(tokenId, tokenType, predicate, nameTagData);
-```
-
 ### Transaction Flow
 
-1. **Minting**: Create new tokens with universal minter secret
+1. **Minting**: Create new tokens
 2. **Transfer**: Submit state transitions between owners
 3. **Completion**: Finalize transfers with new token state
-
-```typescript
-// Complete transfer flow
-const commitment = await client.submitMintTransaction(mintData);
-const proof = await client.getInclusionProof(commitment);
-const transaction = await client.createTransaction(commitment, proof);
-const newToken = await client.finishTransaction(transaction, newPredicate);
-```
 
 ## Architecture
 
@@ -161,50 +173,69 @@ npm run lint
 - **Test Gateway**: `https://gateway-test1.unicity.network:443`
 - **Default Token Type**: Configurable via TokenType enum
 
-## TypeScript Support
-
-The SDK is written in TypeScript and provides full type definitions:
-
-```typescript
-// All classes and interfaces are fully typed
-interface IAddress {
-  getAddressScheme(): AddressScheme;
-  toString(): string;
-}
-
-// Compile-time safety for token operations
-class Token implements ISerializable {
-  // Type-safe token operations
-}
-```
-
 ## Examples
 
 ### Minting Tokens
 ```typescript
-const mintData = new MintTransactionData(
-  tokenId,
-  tokenType, 
-  ownerPredicate,
-  tokenData
-);
+// Create aggregator client
+const aggregatorClient = new AggregatorClient('https://gateway-test1.unicity.network:443');
+const client = new StateTransitionClient(aggregatorClient);
 
-const commitment = await client.submitMintTransaction(mintData);
+const commitment = await client.submitMintTransaction(/* mint parameters */);
+// Since submit takes time, inclusion proof might not be immediately available
+const inclusionProof = await client.getInclusionProof(commitment);
+const mintTransaction = await client.createTransaction(commitment, inclusionProof);
+
+// Create token from transaction
+const token = new Token(
+  data.tokenId,
+  data.tokenType,
+  data.tokenData,
+  data.coinData,
+  await TokenState.create(data.predicate, data.data),
+  [mintTransaction],
+);
 ```
 
 ### Token Transfer
 ```typescript
-const transaction = await client.submitTransaction(
-  sourceToken,
-  targetPredicate,
-  newTokenData
+// Create aggregator client
+const aggregatorClient = new AggregatorClient('https://gateway-test1.unicity.network:443');
+const client = new StateTransitionClient(aggregatorClient);
+
+// Transfer token to recipient
+const commitment = await client.submitTransaction(/* transfer parameters */);
+// Since submit takes time, inclusion proof might not be immediately available
+const inclusionProof = await client.getInclusionProof(commitment);
+const transaction = await client.createTransaction(commitment, inclusionProof);
+```
+
+### Receiving tokens
+```typescript
+const aggregatorClient = new AggregatorClient('https://gateway-test1.unicity.network:443');
+const client = new StateTransitionClient(aggregatorClient);
+
+const importedToken = await new TokenFactory(new PredicateFactory()).create(/* Token JSON */, TestTokenData.fromJSON);
+// Recipient gets transaction from sender
+const importedTransaction = await Transaction.fromJSON(
+  importedToken.id,
+  importedToken.type,
+  /* transaction JSON */,
+  new PredicateFactory(),
+);
+
+// Finish the transaction with the recipient predicate
+const updateToken = await client.finishTransaction(
+  importedToken,
+  /* current token state */
+  importedTransaction,
 );
 ```
 
 ### Checking Token Status
 ```typescript
 const status = await client.getTokenStatus(token);
-console.log(`Token is ${status.isSpent ? 'spent' : 'unspent'}`);
+console.log(`Token is ${status === InclusionProofVerificationStatus.PATH_NOT_INCLUDED ? 'spent' : 'unspent'}`);
 ```
 
 ## License

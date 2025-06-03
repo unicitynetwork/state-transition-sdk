@@ -16,7 +16,8 @@ import { TokenId } from '../../src/token/TokenId.js';
 import { TokenState } from '../../src/token/TokenState.js';
 import { TokenType } from '../../src/token/TokenType.js';
 import { MintTransactionData } from '../../src/transaction/MintTransactionData.js';
-import { TransactionData } from '../../src/transaction/TransactionData.js';
+import { ITransactionJson, Transaction } from '../../src/transaction/Transaction.js';
+import { ITransactionDataJson, TransactionData } from '../../src/transaction/TransactionData.js';
 import { waitInclusionProof } from '../InclusionProofUtils.js';
 import { TestAggregatorClient } from '../TestAggregatorClient.js';
 import { TestTokenData } from '../TestTokenData.js';
@@ -92,22 +93,12 @@ async function mintToken(
   );
 }
 
-async function sendToken<T extends ISerializable, U extends MintTransactionData<ISerializable | null>>(
+async function sendToken(
   client: StateTransitionClient,
-  token: Token<T, U>,
+  token: Token<ISerializable, MintTransactionData<ISerializable | null>>,
   signingService: SigningService,
-): Promise<Token<T, U>> {
-  const nonce = crypto.getRandomValues(new Uint8Array(32));
-  const signingservice = await SigningService.createFromSecret(receiverSecret, nonce);
-  const recipientPredicate = await MaskedPredicate.create(
-    token.id,
-    token.type,
-    signingservice,
-    HashAlgorithm.SHA256,
-    nonce,
-  );
-  const recipient = await DirectAddress.create(recipientPredicate.reference);
-
+  recipient: DirectAddress,
+): Promise<Transaction<TransactionData>> {
   const transactionData = await TransactionData.create(
     token.state,
     recipient.toJSON(),
@@ -118,13 +109,7 @@ async function sendToken<T extends ISerializable, U extends MintTransactionData<
   );
 
   const commitment = await client.submitTransaction(transactionData, signingService);
-  const transaction = await client.createTransaction(commitment, await waitInclusionProof(client, commitment));
-
-  return client.finishTransaction(
-    token,
-    await TokenState.create(recipientPredicate, textEncoder.encode('my custom data')),
-    transaction,
-  );
+  return await client.createTransaction(commitment, await waitInclusionProof(client, commitment));
 }
 
 const initialOwnerSecret = new TextEncoder().encode('secret');
@@ -135,32 +120,55 @@ describe('Transition', function () {
     const client = new StateTransitionClient(new TestAggregatorClient(new SparseMerkleTree(HashAlgorithm.SHA256)));
     const data = await createMintData(initialOwnerSecret);
     const token = await mintToken(client, data);
-    const updateToken = await sendToken(
+    await expect(DirectAddress.create(data.predicate.reference)).resolves.toEqual(
+      await DirectAddress.fromJSON(token.transactions[0].data.recipient),
+    );
+
+    // Recipient prepares the info for the transfer
+    const nonce = crypto.getRandomValues(new Uint8Array(32));
+    const signingservice = await SigningService.createFromSecret(receiverSecret, nonce);
+    const recipientPredicate = await MaskedPredicate.create(
+      token.id,
+      token.type,
+      signingservice,
+      HashAlgorithm.SHA256,
+      nonce,
+    );
+
+    // Create transfer transaction
+    const transaction = await sendToken(
       client,
       token,
       await SigningService.createFromSecret(initialOwnerSecret, data.nonce),
+      await DirectAddress.create(recipientPredicate.reference),
     );
 
+    const tokenFactory = new TokenFactory(new PredicateFactory());
+
+    // Recipient imports token
+    const importedToken = await tokenFactory.create(token.toJSON(), TestTokenData.fromJSON);
+    // Recipient gets transaction from sender
+    const importedTransaction = await Transaction.fromJSON(
+      importedToken.id,
+      importedToken.type,
+      transaction.toJSON() as ITransactionJson<ITransactionDataJson>,
+      new PredicateFactory(),
+    );
+
+    // Finish the transaction with the recipient predicate
+    const updateToken = await client.finishTransaction(
+      importedToken,
+      await TokenState.create(recipientPredicate, textEncoder.encode('my custom data')),
+      importedTransaction,
+    );
+
+    const signingService = await SigningService.createFromSecret(receiverSecret, token.state.unlockPredicate.nonce);
+    expect(importedToken.state.unlockPredicate.isOwner(signingService.publicKey)).toBeTruthy();
     expect(updateToken.id).toEqual(token.id);
     expect(updateToken.type).toEqual(token.type);
     expect(updateToken.data.toJSON()).toEqual(token.data.toJSON());
     expect(updateToken.coins?.toJSON()).toEqual(token.coins?.toJSON());
 
     console.log(JSON.stringify(updateToken.toJSON()));
-  }, 15000);
-
-  it('should import token', async () => {
-    const client = new StateTransitionClient(new TestAggregatorClient(new SparseMerkleTree(HashAlgorithm.SHA256)));
-    const data = await createMintData(initialOwnerSecret);
-    const token = await sendToken(
-      client,
-      await mintToken(client, data),
-      await SigningService.createFromSecret(initialOwnerSecret, data.nonce),
-    );
-
-    const importedToken = await new TokenFactory(new PredicateFactory()).create(token.toJSON(), TestTokenData.fromJSON);
-    const signingService = await SigningService.createFromSecret(receiverSecret, token.state.unlockPredicate.nonce);
-
-    expect(importedToken.state.unlockPredicate.isOwner(signingService.publicKey)).toBeTruthy();
   }, 15000);
 });

@@ -46,6 +46,27 @@ export class DirectAddress implements IAddress {
   }
 
   /**
+   * Create new DirectAddress from string.
+   * @param data Address as string.
+   */
+  public static async fromJSON(data: string): Promise<DirectAddress> {
+    const [scheme, uri] = data.split('://');
+    if (scheme !== AddressScheme.DIRECT) {
+      throw new Error(`Invalid address scheme: expected ${AddressScheme.DIRECT}, got ${scheme}`);
+    }
+
+    const checksum = uri.slice(-8);
+    const address = await DirectAddress.create(DataHash.fromCBOR(HexConverter.decode(uri.slice(0, -8))));
+    if (HexConverter.encode(address.checksum) !== checksum) {
+      throw new Error(
+        `Invalid checksum for DirectAddress: expected ${checksum}, got ${HexConverter.encode(address.checksum)}`,
+      );
+    }
+
+    return address;
+  }
+
+  /**
    * Convert the address into its canonical string form.
    */
   public toJSON(): string {
