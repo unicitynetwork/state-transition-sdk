@@ -10,6 +10,7 @@ export interface IAggregatorClient {
     requestId: RequestId,
     transactionHash: DataHash,
     authenticator: Authenticator,
+    receipt?: boolean,
   ): Promise<SubmitCommitmentResponse>;
 
   getInclusionProof(requestId: RequestId): Promise<InclusionProof>;

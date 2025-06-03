@@ -6,6 +6,7 @@ import { JsonRpcHttpTransport } from '@unicitylabs/commons/lib/json-rpc/JsonRpcH
 
 import { IAggregatorClient } from './IAggregatorClient.js';
 import { SubmitCommitmentResponse, SubmitCommitmentStatus } from './SubmitCommitmentResponse.js';
+import { SubmitCommitmentRequest } from './SubmitCommitmentRequest.js';
 
 export class AggregatorClient implements IAggregatorClient {
   private readonly transport: JsonRpcHttpTransport;
@@ -17,15 +18,13 @@ export class AggregatorClient implements IAggregatorClient {
     requestId: RequestId,
     transactionHash: DataHash,
     authenticator: Authenticator,
+    receipt: boolean = false,
   ): Promise<SubmitCommitmentResponse> {
-    const data = {
-      authenticator: authenticator.toJSON(),
-      requestId: requestId.toJSON(),
-      transactionHash: transactionHash.toJSON(),
-    };
+    const request = new SubmitCommitmentRequest(requestId, transactionHash, authenticator, receipt);
 
-    await this.transport.request('submit_commitment', data);
-    return new SubmitCommitmentResponse(SubmitCommitmentStatus.SUCCESS);
+    const response = await this.transport.request('submit_commitment', request.toJSON());
+
+    return SubmitCommitmentResponse.fromJSON(response)
   }
 
   public async getInclusionProof(requestId: RequestId, blockNum?: bigint): Promise<InclusionProof> {
