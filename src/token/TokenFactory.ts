@@ -13,13 +13,25 @@ import { TokenState } from './TokenState.js';
 import { TokenType } from './TokenType.js';
 import { IPredicateFactory } from '../predicate/IPredicateFactory.js';
 import { IMintTransactionDataJson, MintTransactionData } from '../transaction/MintTransactionData.js';
-import { ITransactionDto, Transaction } from '../transaction/Transaction.js';
-import { ITransactionDataDto, TransactionData } from '../transaction/TransactionData.js';
+import { ITransactionJson, Transaction } from '../transaction/Transaction.js';
+import { ITransactionDataJson, TransactionData } from '../transaction/TransactionData.js';
 import { TokenCoinData } from './fungible/TokenCoinData.js';
 
+/**
+ * Utility for constructing tokens from their serialized form.
+ */
 export class TokenFactory {
+  /**
+   * @param predicateFactory Factory used to deserialize predicates
+   */
   public constructor(private readonly predicateFactory: IPredicateFactory) {}
 
+  /**
+   * Deserialize a token from JSON.
+   *
+   * @param data       Token JSON representation
+   * @param createData Callback producing the custom token data object
+   */
   public async create<TD extends ISerializable>(
     data: ITokenJson,
     createData: (data: unknown) => Promise<TD>,
@@ -57,7 +69,7 @@ export class TokenFactory {
       const transaction = await this.createTransaction(
         tokenId,
         tokenType,
-        data.transactions[i] as ITransactionDto<ITransactionDataDto>,
+        data.transactions[i] as ITransactionJson<ITransactionDataJson>,
       );
 
       // TODO: Move address processing to a separate method
@@ -96,13 +108,22 @@ export class TokenFactory {
     return new Token(tokenId, tokenType, tokenData, coinData, state, transactions, [], tokenVersion);
   }
 
-  public async createMintTransaction(
+  /**
+   * Create a mint transaction from JSON.
+   * @param tokenId Token identifier
+   * @param tokenType Type of the token
+   * @param tokenData Immutable token data object
+   * @param coinData Fungible coin data, or null if none
+   * @param sourceState Mint source state
+   * @param transaction JSON representation of the mint transaction
+   */
+  private async createMintTransaction(
     tokenId: TokenId,
     tokenType: TokenType,
     tokenData: ISerializable,
     coinData: TokenCoinData | null,
     sourceState: RequestId,
-    transaction: ITransactionDto<IMintTransactionDataJson>,
+    transaction: ITransactionJson<IMintTransactionDataJson>,
   ): Promise<Transaction<MintTransactionData<ISerializable | null>>> {
     return new Transaction(
       await MintTransactionData.create(
@@ -121,6 +142,7 @@ export class TokenFactory {
     );
   }
 
+  /** Parse the reason field of a mint transaction (not yet implemented). */
   private createMintReason(data: unknown): ISerializable {
     if (typeof data !== 'object' || data == null || !('type' in data)) {
       throw new Error('MintReason: data is not an object');
@@ -132,10 +154,18 @@ export class TokenFactory {
     }
   }
 
+  /**
+   * Create a transaction from JSON data.
+   * @param tokenId Token identifier
+   * @param tokenType Token type
+   * @param data Transaction data to deserialize
+   * @param inclusionProof Transaction inclusion proof
+   * @private
+   */
   private async createTransaction(
     tokenId: TokenId,
     tokenType: TokenType,
-    { data, inclusionProof }: ITransactionDto<ITransactionDataDto>,
+    { data, inclusionProof }: ITransactionJson<ITransactionDataJson>,
   ): Promise<Transaction<TransactionData>> {
     return new Transaction(
       await TransactionData.create(
@@ -153,6 +183,12 @@ export class TokenFactory {
     );
   }
 
+  /**
+   * Verify a mint transaction integrity and validate against public key.
+   * @param transaction Mint transaction
+   * @param publicKey Public key of the minter
+   * @private
+   */
   private async verifyMintTransaction(
     transaction: Transaction<MintTransactionData<ISerializable | null>>,
     publicKey: Uint8Array,
