@@ -34,13 +34,16 @@ export class BurnPredicate implements IPredicate {
     private readonly _nonce: Uint8Array,
   ) {}
 
-  /** Nonce used when creating the predicate. */
+  /** @inheritDoc */
   public get nonce(): Uint8Array {
     return new Uint8Array(this._nonce);
   }
 
   /**
-   * Construct a new burn predicate for the given token.
+   * Create a new burn predicate.
+   * @param tokenId Token ID for which the predicate is valid.
+   * @param tokenType Type of the token.
+   * @param nonce Nonce providing uniqueness for the predicate.
    */
   public static async create(tokenId: TokenId, tokenType: TokenType, nonce: Uint8Array): Promise<BurnPredicate> {
     const reference = await BurnPredicate.calculateReference(tokenType);
@@ -50,22 +53,22 @@ export class BurnPredicate implements IPredicate {
   }
 
   /**
-   * Parse a burn predicate from JSON.
+   * Create a burn predicate from JSON data.
+   * @param tokenId Token ID for which the predicate is valid.
+   * @param tokenType Type of the token.
+   * @param data JSON data representing the burn predicate.
    */
-  public static async fromJSON(tokenId: TokenId, tokenType: TokenType, data: unknown): Promise<BurnPredicate> {
+  public static fromJSON(tokenId: TokenId, tokenType: TokenType, data: unknown): Promise<BurnPredicate> {
     if (!BurnPredicate.isJSON(data)) {
       throw new Error('Invalid burn predicate json');
     }
 
-    const nonce = HexConverter.decode(data.nonce);
-    const reference = await BurnPredicate.calculateReference(tokenType);
-    const hash = await BurnPredicate.calculateHash(reference, tokenId, nonce);
-
-    return new BurnPredicate(reference, hash, nonce);
+    return BurnPredicate.create(tokenId, tokenType, HexConverter.decode(data.nonce));
   }
 
   /**
-   * Calculate the predicate reference from the token type.
+   * Calculate the reference hash for a burn predicate.
+   * @param tokenType Type of the token for which the predicate is valid.
    */
   public static calculateReference(tokenType: TokenType): Promise<DataHash> {
     return new DataHasher(HashAlgorithm.SHA256)
@@ -73,19 +76,29 @@ export class BurnPredicate implements IPredicate {
       .digest();
   }
 
+  /**
+   * Check if the provided data is a valid JSON representation of a burn predicate.
+   * @param data Data to validate.
+   * @private
+   */
   private static isJSON(data: unknown): data is IPredicateJson {
     return typeof data === 'object' && data !== null && 'nonce' in data && typeof data.nonce === 'string';
   }
 
+  /**
+   * Compute the predicate hash for a specific token and nonce.
+   * @param reference Reference hash of the predicate.
+   * @param tokenId Token ID for which the predicate is valid.
+   * @param nonce Nonce providing uniqueness for the predicate.
+   * @private
+   */
   private static calculateHash(reference: DataHash, tokenId: TokenId, nonce: Uint8Array): Promise<DataHash> {
     return new DataHasher(HashAlgorithm.SHA256)
       .update(CborEncoder.encodeArray([reference.toCBOR(), tokenId.toCBOR(), CborEncoder.encodeByteString(nonce)]))
       .digest();
   }
 
-  /**
-   * Serialise the predicate to a JSON object.
-   */
+  /** @inheritDoc */
   public toJSON(): IPredicateJson {
     return {
       nonce: HexConverter.encode(this._nonce),
@@ -93,28 +106,24 @@ export class BurnPredicate implements IPredicate {
     };
   }
 
-  /**
-   * Encode the predicate as CBOR for hashing.
-   */
+  /** @inheritDoc */
   public toCBOR(): Uint8Array {
     return CborEncoder.encodeArray([CborEncoder.encodeTextString(this.type)]);
   }
 
-  /**
-   * Burn predicates are never valid for verification.
-   */
+  /** @inheritDoc */
   public verify(): Promise<boolean> {
     return Promise.resolve(false);
   }
 
-  /** Human readable representation. */
+  /** Convert instance to readable string */
   public toString(): string {
     return dedent`
           Predicate[${this.type}]:
             Hash: ${this.hash.toString()}`;
   }
 
-  /** Burn predicate can never be owned. */
+  /** @inheritDoc */
   public isOwner(): Promise<boolean> {
     return Promise.resolve(false);
   }

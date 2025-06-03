@@ -14,13 +14,13 @@ import { TokenType } from '../token/TokenType.js';
 const TYPE = PredicateType.MASKED;
 
 /**
- * Predicate where the nonce is hidden (masked) by a hash.
+ * Predicate for masked address transaction.
  */
 export class MaskedPredicate extends DefaultPredicate {
   /**
    * @param publicKey     Owner public key
-   * @param algorithm     Signing algorithm
-   * @param hashAlgorithm Algorithm used to generate nonce hash
+   * @param algorithm     Transaction signing algorithm
+   * @param hashAlgorithm Transaction hash algorithm
    * @param nonce         Nonce used in the predicate
    * @param reference     Predicate reference
    * @param hash          Predicate hash
@@ -38,6 +38,11 @@ export class MaskedPredicate extends DefaultPredicate {
 
   /**
    * Create a new masked predicate for the given owner.
+   * @param tokenId token ID.
+   * @param tokenType token type.
+   * @param signingService Token owner's signing service.
+   * @param hashAlgorithm Hash algorithm used to hash transaction.
+   * @param nonce Nonce value used during creation, providing uniqueness.
    */
   public static async create(
     tokenId: TokenId,
@@ -66,7 +71,10 @@ export class MaskedPredicate extends DefaultPredicate {
   }
 
   /**
-   * Import a predicate from its JSON form.
+   * Create a masked predicate from JSON data.
+   * @param tokenId Token ID.
+   * @param tokenType Token type.
+   * @param data JSON data representing the masked predicate.
    */
   public static async fromJSON(tokenId: TokenId, tokenType: TokenType, data: unknown): Promise<MaskedPredicate> {
     if (!DefaultPredicate.isJSON(data)) {
@@ -88,7 +96,12 @@ export class MaskedPredicate extends DefaultPredicate {
   }
 
   /**
-   * Derive the predicate reference for the provided parameters.
+   * Compute the predicate reference.
+   * @param tokenType token type.
+   * @param algorithm Signing algorithm.
+   * @param publicKey Owner's public key.
+   * @param hashAlgorithm Hash algorithm used for signing.
+   * @param nonce Nonce providing uniqueness for the predicate.
    */
   public static calculateReference(
     tokenType: TokenType,
@@ -111,7 +124,12 @@ export class MaskedPredicate extends DefaultPredicate {
       .digest();
   }
 
-  /** Compute the predicate hash for a specific token. */
+  /**
+   * Compute the predicate hash for a specific token and nonce.
+   * @param reference Reference hash of the predicate.
+   * @param tokenId Token ID.
+   * @private
+   */
   private static calculateHash(reference: DataHash, tokenId: TokenId): Promise<DataHash> {
     return new DataHasher(HashAlgorithm.SHA256)
       .update(CborEncoder.encodeArray([reference.toCBOR(), tokenId.toCBOR()]))

@@ -52,7 +52,7 @@ export class TokenCoinData implements ISerializable {
     return new TokenCoinData(coins);
   }
 
-  /** Encode balances as CBOR. */
+  /** @inheritDoc */
   public toCBOR(): Uint8Array {
     return CborEncoder.encodeArray(
       Array.from(this._coins.entries()).map(([key, value]) =>
@@ -61,12 +61,12 @@ export class TokenCoinData implements ISerializable {
     );
   }
 
-  /** Convert balances to JSON-friendly tuples. */
+  /** @inheritDoc */
   public toJSON(): TokenCoinDataJson {
     return Array.from(this._coins.entries()).map(([key, value]) => [key, value.toString()]);
   }
 
-  /** Human readable list of coin balances. */
+  /** Convert instance to readable string */
   public toString(): string {
     return dedent`
       FungibleTokenData

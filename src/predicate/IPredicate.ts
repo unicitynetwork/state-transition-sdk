@@ -13,22 +13,32 @@ export interface IPredicateJson {
 }
 
 /**
- * Runtime representation of a token ownership predicate.
+ * Interface for a predicate that controls token ownership.
  */
 export interface IPredicate {
-  /** Unique reference used in addresses. */
+  /** Reference hash used in addresses. */
   readonly reference: DataHash;
-  /** Full hash identifying the predicate. */
+  /** Unique hash identifying the predicate. */
   readonly hash: DataHash;
   /** Nonce used when creating the predicate. */
   readonly nonce: Uint8Array;
 
-  /** Test if the given key is allowed to operate the token. */
+  /**
+   * Test if the given key is allowed to operate the token.
+   * @param publicKey Public key to check ownership
+   */
   isOwner(publicKey: Uint8Array): Promise<boolean>;
-  /** Verify a transaction's inclusion and signature. */
+  /**
+   * Verify a transaction against the predicate.
+   * @param transaction Transaction to verify
+   */
   verify(transaction: Transaction<MintTransactionData<ISerializable | null> | TransactionData>): Promise<boolean>;
-  /** JSON serialisation. */
+  /**
+   * Convert the predicate to its JSON representation.
+   */
   toJSON(): IPredicateJson;
-  /** CBOR serialisation. */
+  /**
+   * Convert the predicate to its CBOR representation.
+   */
   toCBOR(): Uint8Array;
 }

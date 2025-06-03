@@ -23,12 +23,12 @@ import { TransactionData } from './transaction/TransactionData.js';
 
 // TOKENID string SHA-256 hash
 /**
- * Constant suffix used when deriving the mint request identifier.
+ * Constant suffix used when deriving the mint initial state.
  */
 export const MINT_SUFFIX = HexConverter.decode('9e82002c144d7c5796c50f6db50a0c7bbd7f717ae3af6c6c71a3e9eba3022730');
 // I_AM_UNIVERSAL_MINTER_FOR_ string bytes
 /**
- * Secret prefix for the universal minter used internally when minting tokens.
+ * Secret prefix for the signing used internally when minting tokens.
  */
 export const MINTER_SECRET = HexConverter.decode('495f414d5f554e4956455253414c5f4d494e5445525f464f525f');
 

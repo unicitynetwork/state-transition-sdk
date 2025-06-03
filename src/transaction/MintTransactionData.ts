@@ -53,7 +53,16 @@ export class MintTransactionData<R extends ISerializable | null> {
   }
 
   /**
-   * Construct a new mint transaction.
+   * Create a new mint transaction data object.
+   * @param tokenId Token identifier
+   * @param tokenType Token type identifier
+   * @param tokenData Token data object
+   * @param coinData Fungible coin data, or null if none
+   * @param sourceState Mint source state
+   * @param recipient Address of the first token owner
+   * @param salt User selected salt
+   * @param dataHash Hash pointing to next state data
+   * @param reason Reason object attached to the mint
    */
   public static async create<R extends ISerializable | null>(
     tokenId: TokenId,
@@ -90,7 +99,7 @@ export class MintTransactionData<R extends ISerializable | null> {
     );
   }
 
-  /** Convert to JSON representation. */
+  /** Serialize this object to JSON object. */
   public toJSON(): IMintTransactionDataJson {
     return {
       dataHash: this.dataHash?.toJSON() ?? null,
@@ -100,7 +109,7 @@ export class MintTransactionData<R extends ISerializable | null> {
     };
   }
 
-  /** Serialise this object using CBOR. */
+  /** Serialize this object to CBOR. */
   public toCBOR(): Uint8Array {
     return CborEncoder.encodeArray([
       CborEncoder.encodeTextString(this.recipient),
@@ -110,7 +119,7 @@ export class MintTransactionData<R extends ISerializable | null> {
     ]);
   }
 
-  /** Multiline debug representation. */
+  /** Convert instance to readable string */
   public toString(): string {
     return dedent`
       MintTransactionData:

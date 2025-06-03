@@ -58,7 +58,7 @@ export class TokenState {
     );
   }
 
-  /** Serialise the state to JSON. */
+  /** Serialize the state to JSON. */
   public toJSON(): ITokenStateJson {
     return {
       data: this._data ? HexConverter.encode(this._data) : null,
@@ -74,7 +74,7 @@ export class TokenState {
     ]);
   }
 
-  /** Human readable form for debugging. */
+  /** Convert instance to readable string */
   public toString(): string {
     return dedent`
         TokenState:

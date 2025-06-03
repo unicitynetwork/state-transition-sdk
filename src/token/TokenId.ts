@@ -32,7 +32,7 @@ export class TokenId {
     return new Uint8Array(this._id);
   }
 
-  /** Debug representation. */
+  /** Convert instance to readable string */
   public toString(): string {
     return `TokenId[${HexConverter.encode(this._id)}]`;
   }

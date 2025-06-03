@@ -8,7 +8,7 @@ export interface IAddress {
   readonly scheme: AddressScheme;
 
   /**
-   * Serialise the address into a URI-like string representation.
+   * Serialize the address into a URI-like string representation.
    */
   toJSON(): string;
 }

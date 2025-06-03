@@ -5,11 +5,11 @@ import { DataHasher } from '@unicitylabs/commons/lib/hash/DataHasher.js';
 import { dedent } from '@unicitylabs/commons/lib/util/StringUtils.js';
 
 import { IMintTransactionDataJson, MintTransactionData } from './MintTransactionData.js';
-import { ITransactionDataDto, TransactionData } from './TransactionData.js';
+import { ITransactionDataJson, TransactionData } from './TransactionData.js';
 import { ISerializable } from '../ISerializable.js';
 
-/** DTO used when serialising a transaction. */
-export interface ITransactionDto<T extends ITransactionDataDto | IMintTransactionDataJson> {
+/** JSON representation of a {@link Transaction}. */
+export interface ITransactionJson<T extends ITransactionDataJson | IMintTransactionDataJson> {
   readonly data: T;
   readonly inclusionProof: IInclusionProofJson;
 }
@@ -27,21 +27,22 @@ export class Transaction<T extends TransactionData | MintTransactionData<ISerial
     public readonly inclusionProof: InclusionProof,
   ) {}
 
-  /** Serialise transaction and proof to JSON. */
-  public toJSON(): ITransactionDto<ITransactionDataDto | IMintTransactionDataJson> {
+  /** Serialize transaction and proof to JSON. */
+  public toJSON(): ITransactionJson<ITransactionDataJson | IMintTransactionDataJson> {
     return {
       data: this.data.toJSON(),
       inclusionProof: this.inclusionProof.toJSON(),
     };
   }
 
-  /** Encode transaction and proof to CBOR. */
+  /** Serialize transaction and proof to CBOR. */
   public toCBOR(): Uint8Array {
     return CborEncoder.encodeArray([this.data.toCBOR(), this.inclusionProof.toCBOR()]);
   }
 
   /**
    * Verify if the provided data matches the optional data hash.
+   * @param data Data to verify against the transaction's data hash
    */
   public async containsData(data: Uint8Array | null): Promise<boolean> {
     if (this.data.dataHash) {
@@ -57,7 +58,7 @@ export class Transaction<T extends TransactionData | MintTransactionData<ISerial
     return !data;
   }
 
-  /** Multi-line debug description. */
+  /** Convert instance to readable string */
   public toString(): string {
     return dedent`
         Transaction:

@@ -10,7 +10,10 @@ export class CoinId {
     this.data = new Uint8Array(data);
   }
 
-  /** Parse a coin identifier from a hex string. */
+  /**
+   * Creates a new CoinId from raw bytes.
+   * @param data Raw byte representation
+   */
   public static fromDto(data: string): CoinId {
     return new CoinId(HexConverter.decode(data));
   }
@@ -20,7 +23,7 @@ export class CoinId {
     return HexConverter.encode(this.data);
   }
 
-  /** CBOR serialisation. */
+  /** CBOR serialization. */
   public toCBOR(): Uint8Array {
     return CborEncoder.encodeByteString(this.data);
   }

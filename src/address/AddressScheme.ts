@@ -1,5 +1,5 @@
 /**
- * Indicates how an address should be interpreted by the SDK.
+ * Enum representing different address schemes.
  */
 export enum AddressScheme {
   /** Direct address pointing to a predicate reference. */

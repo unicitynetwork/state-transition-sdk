@@ -10,7 +10,7 @@ import { ITokenJson } from '../token/Token.js';
 import { ITokenStateJson, TokenState } from '../token/TokenState.js';
 
 /** JSON representation of a {@link TransactionData}. */
-export interface ITransactionDataDto {
+export interface ITransactionDataJson {
   readonly sourceState: ITokenStateJson;
   readonly recipient: string;
   readonly salt: string;
@@ -55,7 +55,15 @@ export class TransactionData {
     return this.hash.algorithm;
   }
 
-  /** Construct a new transaction data object. */
+  /**
+   * Create a new transaction data object.
+   * @param state Token state used as source for the transfer
+   * @param recipient Address of the new token owner
+   * @param salt Random salt
+   * @param dataHash Hash of new token owners data
+   * @param message Message bytes
+   * @param nameTags
+   */
   public static async create(
     state: TokenState,
     recipient: string,
@@ -85,8 +93,8 @@ export class TransactionData {
     );
   }
 
-  /** Serialise to JSON. */
-  public toJSON(): ITransactionDataDto {
+  /** Serialize this token to JSON. */
+  public toJSON(): ITransactionDataJson {
     return {
       dataHash: this.dataHash?.toJSON() ?? null,
       message: this._message ? HexConverter.encode(this._message) : null,
@@ -97,7 +105,7 @@ export class TransactionData {
     };
   }
 
-  /** Encode as CBOR byte array. */
+  /** Serialize this token to CBOR. */
   public toCBOR(): Uint8Array {
     return CborEncoder.encodeArray([
       this.sourceState.toCBOR(),
@@ -109,7 +117,7 @@ export class TransactionData {
     ]);
   }
 
-  /** Multi-line debug output. */
+  /** Convert instance to readable string */
   public toString(): string {
     return dedent`
       TransactionData:

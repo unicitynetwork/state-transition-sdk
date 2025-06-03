@@ -52,13 +52,18 @@ export abstract class DefaultPredicate implements IPredicate {
     return this._publicKey;
   }
 
-  /** Nonce originally used to create the predicate. */
+  /**
+   * @inheritDoc
+   */
   public get nonce(): Uint8Array {
     return this._nonce;
   }
 
-  /** Validate a JSON object representing a predicate. */
-  public static isJSON(data: unknown): data is IPredicateJson {
+  /**
+   * Check if the provided data is a valid JSON representation of a key based predicate.
+   * @param data Data to validate.
+   */
+  protected static isJSON(data: unknown): data is IPredicateJson {
     return (
       typeof data === 'object' &&
       data !== null &&
@@ -73,7 +78,9 @@ export abstract class DefaultPredicate implements IPredicate {
     );
   }
 
-  /** Serialise the predicate to JSON. */
+  /**
+   * @inheritDoc
+   */
   public toJSON(): IPredicateJson {
     return {
       algorithm: this.algorithm,
@@ -84,7 +91,9 @@ export abstract class DefaultPredicate implements IPredicate {
     };
   }
 
-  /** Encode the predicate as a CBOR byte array. */
+  /**
+   * @inheritDoc
+   */
   public toCBOR(): Uint8Array {
     return CborEncoder.encodeArray([
       CborEncoder.encodeTextString(this.type),
@@ -96,7 +105,7 @@ export abstract class DefaultPredicate implements IPredicate {
   }
 
   /**
-   * Verify a transaction against this predicate.
+   * @inheritDoc
    */
   public async verify(
     transaction: Transaction<MintTransactionData<ISerializable> | TransactionData>,
@@ -124,7 +133,7 @@ export abstract class DefaultPredicate implements IPredicate {
     return status === InclusionProofVerificationStatus.OK;
   }
 
-  /** Human readable description of the predicate. */
+  /** Convert instance to readable string */
   public toString(): string {
     return dedent`
           Predicate[${this.type}]:
@@ -135,7 +144,9 @@ export abstract class DefaultPredicate implements IPredicate {
             Hash: ${this.hash.toString()}`;
   }
 
-  /** Check if the supplied public key matches the predicate owner. */
+  /**
+   * @inheritDoc
+   */
   public isOwner(publicKey: Uint8Array): Promise<boolean> {
     return Promise.resolve(HexConverter.encode(publicKey) === HexConverter.encode(this.publicKey));
   }

@@ -1,10 +1,10 @@
 /**
- * Enumeration of predicate implementations supported by the SDK.
+ * Enum representing different types of predicates.
  */
 export enum PredicateType {
-  /** Predicate with hidden nonce */
+  /** Predicate for masked address */
   MASKED = 'MASKED',
-  /** Predicate exposing nonce */
+  /** Predicate for public address */
   UNMASKED = 'UNMASKED',
   /** Special predicate burning the token */
   BURN = 'BURN',

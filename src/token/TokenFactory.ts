@@ -13,8 +13,8 @@ import { TokenState } from './TokenState.js';
 import { TokenType } from './TokenType.js';
 import { IPredicateFactory } from '../predicate/IPredicateFactory.js';
 import { IMintTransactionDataJson, MintTransactionData } from '../transaction/MintTransactionData.js';
-import { ITransactionDto, Transaction } from '../transaction/Transaction.js';
-import { ITransactionDataDto, TransactionData } from '../transaction/TransactionData.js';
+import { ITransactionJson, Transaction } from '../transaction/Transaction.js';
+import { ITransactionDataJson, TransactionData } from '../transaction/TransactionData.js';
 import { TokenCoinData } from './fungible/TokenCoinData.js';
 
 /**
@@ -69,7 +69,7 @@ export class TokenFactory {
       const transaction = await this.createTransaction(
         tokenId,
         tokenType,
-        data.transactions[i] as ITransactionDto<ITransactionDataDto>,
+        data.transactions[i] as ITransactionJson<ITransactionDataJson>,
       );
 
       // TODO: Move address processing to a separate method
@@ -117,7 +117,7 @@ export class TokenFactory {
     tokenData: ISerializable,
     coinData: TokenCoinData | null,
     sourceState: RequestId,
-    transaction: ITransactionDto<IMintTransactionDataJson>,
+    transaction: ITransactionJson<IMintTransactionDataJson>,
   ): Promise<Transaction<MintTransactionData<ISerializable | null>>> {
     return new Transaction(
       await MintTransactionData.create(
@@ -154,7 +154,7 @@ export class TokenFactory {
   private async createTransaction(
     tokenId: TokenId,
     tokenType: TokenType,
-    { data, inclusionProof }: ITransactionDto<ITransactionDataDto>,
+    { data, inclusionProof }: ITransactionJson<ITransactionDataJson>,
   ): Promise<Transaction<TransactionData>> {
     return new Transaction(
       await TransactionData.create(

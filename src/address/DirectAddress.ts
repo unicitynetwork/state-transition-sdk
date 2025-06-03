@@ -8,7 +8,10 @@ import { AddressScheme } from './AddressScheme.js';
 import { IAddress } from './IAddress.js';
 
 /**
- * An address that directly encodes a predicate reference and checksum.
+ * Address that directly references a predicate.
+ *
+ * This address type is used to point to a specific predicate by its reference hash.
+ * It includes a checksum to help detect mistyped addresses.
  */
 export class DirectAddress implements IAddress {
   /**
@@ -56,9 +59,7 @@ export class DirectAddress implements IAddress {
     return CborEncoder.encodeTextString(this.toString());
   }
 
-  /**
-   * Human readable form used in logs and debugging.
-   */
+  /** Convert instance to readable string */
   public toString(): string {
     return `${this.scheme}://${HexConverter.encode(this.data.toCBOR())}${HexConverter.encode(this.checksum)}`;
   }

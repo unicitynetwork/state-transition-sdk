@@ -8,7 +8,7 @@ import { IAggregatorClient } from './IAggregatorClient.js';
 import { SubmitCommitmentResponse, SubmitCommitmentStatus } from './SubmitCommitmentResponse.js';
 
 /**
- * JSON-RPC client used to communicate with an aggregator node.
+ * Client implementation for communicating with an aggregator via JSON-RPC.
  */
 export class AggregatorClient implements IAggregatorClient {
   private readonly transport: JsonRpcHttpTransport;
@@ -23,12 +23,7 @@ export class AggregatorClient implements IAggregatorClient {
   }
 
   /**
-   * Submit a transaction commitment for inclusion in the ledger.
-   *
-   * @param requestId       Unique request identifier
-   * @param transactionHash Hash of the transaction payload
-   * @param authenticator   Authenticator proving request ownership
-   * @returns Result status from the aggregator
+   * @inheritDoc
    */
   public async submitTransaction(
     requestId: RequestId,
@@ -42,15 +37,12 @@ export class AggregatorClient implements IAggregatorClient {
     };
 
     await this.transport.request('submit_commitment', data);
+    // TODO: Fix response
     return new SubmitCommitmentResponse(SubmitCommitmentStatus.SUCCESS);
   }
 
   /**
-   * Retrieve an inclusion proof for the given request.
-   *
-   * @param requestId Request identifier to query
-   * @param blockNum  Optional block height constraint
-   * @returns The inclusion proof returned by the aggregator
+   * @inheritDoc
    */
   public async getInclusionProof(requestId: RequestId, blockNum?: bigint): Promise<InclusionProof> {
     const data = { blockNum: blockNum?.toString(), requestId: requestId.toJSON() };

@@ -20,17 +20,17 @@ export class TokenType {
     return new Uint8Array(this._id);
   }
 
-  /** Hex representation for JSON serialisation. */
+  /** Hex representation for JSON serialization. */
   public toJSON(): string {
     return HexConverter.encode(this._id);
   }
 
-  /** CBOR serialisation. */
+  /** CBOR serialization. */
   public toCBOR(): Uint8Array {
     return CborEncoder.encodeByteString(this._id);
   }
 
-  /** Debug string. */
+  /** Convert instance to readable string */
   public toString(): string {
     return `TokenType[${HexConverter.encode(this._id)}]`;
   }

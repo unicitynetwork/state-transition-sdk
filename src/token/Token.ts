@@ -7,8 +7,8 @@ import { TokenType } from './TokenType.js';
 import { ISerializable } from '../ISerializable.js';
 import { NameTagToken } from './NameTagToken.js';
 import { IMintTransactionDataJson, MintTransactionData } from '../transaction/MintTransactionData.js';
-import { ITransactionDto, Transaction } from '../transaction/Transaction.js';
-import { ITransactionDataDto, TransactionData } from '../transaction/TransactionData.js';
+import { ITransactionJson, Transaction } from '../transaction/Transaction.js';
+import { ITransactionDataJson, TransactionData } from '../transaction/TransactionData.js';
 import { TokenCoinData, TokenCoinDataJson } from './fungible/TokenCoinData.js';
 
 /** Current serialization version for tokens. */
@@ -24,7 +24,7 @@ export interface ITokenJson {
   readonly data: unknown;
   readonly coins: TokenCoinDataJson | null;
   readonly state: ITokenStateJson;
-  readonly transactions: [ITransactionDto<IMintTransactionDataJson>, ...ITransactionDto<ITransactionDataDto>[]];
+  readonly transactions: [ITransactionJson<IMintTransactionDataJson>, ...ITransactionJson<ITransactionDataJson>[]];
   readonly nametagTokens: ITokenJson[];
 }
 
@@ -34,6 +34,14 @@ export interface ITokenJson {
 export class Token<TD extends ISerializable, MTD extends MintTransactionData<ISerializable | null>> {
   /**
    * Create a new token instance.
+   * @param id Token identifier
+   * @param type Token type
+   * @param data Token immutable data object
+   * @param coins Fungible coin balances associated with this token, or null if none
+   * @param state Current state of the token including state data and unlock predicate
+   * @param _transactions History of transactions starting with the mint transaction
+   * @param _nametagTokens List of nametag tokens associated with this token
+   * @param version Serialization version of the token, defaults to {@link TOKEN_VERSION}
    */
   public constructor(
     public readonly id: TokenId,
@@ -59,7 +67,7 @@ export class Token<TD extends ISerializable, MTD extends MintTransactionData<ISe
     return [...this._transactions];
   }
 
-  /** Serialise this token to JSON. */
+  /** Serialize this token to JSON. */
   public toJSON(): ITokenJson {
     return {
       coins: this.coins?.toJSON() ?? null,
@@ -68,15 +76,15 @@ export class Token<TD extends ISerializable, MTD extends MintTransactionData<ISe
       nametagTokens: this.nametagTokens.map((token) => token.toJSON()),
       state: this.state.toJSON(),
       transactions: this.transactions.map((transaction) => transaction.toJSON()) as [
-        ITransactionDto<IMintTransactionDataJson>,
-        ...ITransactionDto<ITransactionDataDto>[],
+        ITransactionJson<IMintTransactionDataJson>,
+        ...ITransactionJson<ITransactionDataJson>[],
       ],
       type: this.type.toJSON(),
       version: this.version,
     };
   }
 
-  /** Encode the token using CBOR for hashing or storage. */
+  /** Serialize this token to CBOR. */
   public toCBOR(): Uint8Array {
     return CborEncoder.encodeArray([
       this.id.toCBOR(),
@@ -90,7 +98,7 @@ export class Token<TD extends ISerializable, MTD extends MintTransactionData<ISe
     ]);
   }
 
-  /** Human readable multi-line representation. */
+  /** Convert instance to readable string */
   public toString(): string {
     return dedent`
         Token[${this.version}]:

@@ -17,7 +17,7 @@ interface ISubmitCommitmentResponseDto {
 }
 
 /**
- * Response object returned by the aggregator on submission.
+ * Response object returned by the aggregator on commitment submission.
  */
 export class SubmitCommitmentResponse {
   /**

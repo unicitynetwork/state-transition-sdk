@@ -8,11 +8,11 @@ import { TokenId } from '../token/TokenId.js';
 import { TokenType } from '../token/TokenType.js';
 
 /**
- * Default implementation of {@link IPredicateFactory} used by the SDK.
+ * Default implementation of {@link IPredicateFactory}.
  */
 export class PredicateFactory implements IPredicateFactory {
   /**
-   * Instantiate a predicate based on its serialized JSON description.
+   * @inheritDoc
    */
   public create(tokenId: TokenId, tokenType: TokenType, data: IPredicateJson): Promise<IPredicate> {
     switch (data.type) {

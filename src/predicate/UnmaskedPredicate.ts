@@ -14,14 +14,14 @@ import { TokenType } from '../token/TokenType.js';
 const TYPE = PredicateType.UNMASKED;
 
 /**
- * Predicate where the nonce value is revealed in clear text.
+ * Predicate for public address transaction.
  */
 export class UnmaskedPredicate extends DefaultPredicate {
   /**
-   * @param publicKey     Owner public key
-   * @param algorithm     Signing algorithm
-   * @param hashAlgorithm Algorithm used to hash predicate data
-   * @param nonce         Nonce value used during creation
+   * @param publicKey     Owner public key.
+   * @param algorithm     Transaction signing algorithm
+   * @param hashAlgorithm Transaction hash algorithm
+   * @param nonce         Nonce used in the predicate
    * @param reference     Predicate reference
    * @param hash          Predicate hash
    */
@@ -38,6 +38,11 @@ export class UnmaskedPredicate extends DefaultPredicate {
 
   /**
    * Create a new unmasked predicate for the given owner.
+   * @param tokenId Token ID
+   * @param tokenType Token type
+   * @param signingService Token owner's signing service
+   * @param hashAlgorithm Hash algorithm used to hash transaction
+   * @param salt Transaction salt
    */
   public static async create(
     tokenId: TokenId,
@@ -69,7 +74,10 @@ export class UnmaskedPredicate extends DefaultPredicate {
   }
 
   /**
-   * Import an unmasked predicate from JSON.
+   * Create a unmasked predicate from JSON data.
+   * @param tokenId Token ID.
+   * @param tokenType Token type.
+   * @param data JSON data representing the masked predicate.
    */
   public static async fromJSON(tokenId: TokenId, tokenType: TokenType, data: unknown): Promise<DefaultPredicate> {
     if (!DefaultPredicate.isJSON(data)) {
@@ -91,7 +99,11 @@ export class UnmaskedPredicate extends DefaultPredicate {
   }
 
   /**
-   * Calculate the reference for the given parameters.
+   * Calculate the predicate reference.
+   * @param tokenType Token type
+   * @param algorithm Signing algorithm
+   * @param publicKey Owner public key
+   * @param hashAlgorithm Hash algorithm used to hash transaction
    */
   public static calculateReference(
     tokenType: TokenType,
@@ -112,7 +124,13 @@ export class UnmaskedPredicate extends DefaultPredicate {
       .digest();
   }
 
-  /** Compute the predicate hash including the nonce. */
+  /**
+   * Calculate the predicate hash.
+   * @param reference Reference of the predicate
+   * @param tokenId Token ID
+   * @param nonce Nonce used in the predicate
+   * @private
+   */
   private static calculateHash(reference: DataHash, tokenId: TokenId, nonce: Uint8Array): Promise<DataHash> {
     return new DataHasher(HashAlgorithm.SHA256)
       .update(CborEncoder.encodeArray([reference.toCBOR(), tokenId.toCBOR(), CborEncoder.encodeByteString(nonce)]))
