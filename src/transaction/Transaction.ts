@@ -5,31 +5,45 @@ import { DataHasher } from '@unicitylabs/commons/lib/hash/DataHasher.js';
 import { dedent } from '@unicitylabs/commons/lib/util/StringUtils.js';
 
 import { IMintTransactionDataJson, MintTransactionData } from './MintTransactionData.js';
-import { ITransactionDataDto, TransactionData } from './TransactionData.js';
+import { ITransactionDataJson, TransactionData } from './TransactionData.js';
 import { ISerializable } from '../ISerializable.js';
 
-export interface ITransactionDto<T extends ITransactionDataDto | IMintTransactionDataJson> {
+/** JSON representation of a {@link Transaction}. */
+export interface ITransactionJson<T extends ITransactionDataJson | IMintTransactionDataJson> {
   readonly data: T;
   readonly inclusionProof: IInclusionProofJson;
 }
 
+/**
+ * A transaction along with its verified inclusion proof.
+ */
 export class Transaction<T extends TransactionData | MintTransactionData<ISerializable | null>> {
+  /**
+   * @param data           Transaction data payload
+   * @param inclusionProof Proof of inclusion in the ledger
+   */
   public constructor(
     public readonly data: T,
     public readonly inclusionProof: InclusionProof,
   ) {}
 
-  public toJSON(): ITransactionDto<ITransactionDataDto | IMintTransactionDataJson> {
+  /** Serialize transaction and proof to JSON. */
+  public toJSON(): ITransactionJson<ITransactionDataJson | IMintTransactionDataJson> {
     return {
       data: this.data.toJSON(),
       inclusionProof: this.inclusionProof.toJSON(),
     };
   }
 
+  /** Serialize transaction and proof to CBOR. */
   public toCBOR(): Uint8Array {
     return CborEncoder.encodeArray([this.data.toCBOR(), this.inclusionProof.toCBOR()]);
   }
 
+  /**
+   * Verify if the provided data matches the optional data hash.
+   * @param data Data to verify against the transaction's data hash
+   */
   public async containsData(data: Uint8Array | null): Promise<boolean> {
     if (this.data.dataHash) {
       if (!data) {
@@ -44,6 +58,7 @@ export class Transaction<T extends TransactionData | MintTransactionData<ISerial
     return !data;
   }
 
+  /** Convert instance to readable string */
   public toString(): string {
     return dedent`
         Transaction:
