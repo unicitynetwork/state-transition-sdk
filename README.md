@@ -136,7 +136,7 @@ Recipient knows some info about token, like token type for generating address.
 A[Start] 
 A --> B[Recipient Generates Address]
 B --> C[Recipient Shares Address with Sender]
-C --> D[Sender Submits Transfer Transaction]
+C --> D[Sender Submits Transaction Commitment]
 D --> E[Sender Retrieves Inclusion Proof]
 E --> F[Sender Creates Transaction]
 F --> G[Sender Sends Transaction and Token to Recipient]
