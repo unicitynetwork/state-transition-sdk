@@ -1,6 +1,5 @@
-import { InclusionProof, InclusionProofVerificationStatus } from '@unicitylabs/commons/lib/api/InclusionProof.js';
+import { InclusionProofVerificationStatus } from '@unicitylabs/commons/lib/api/InclusionProof.js';
 import { RequestId } from '@unicitylabs/commons/lib/api/RequestId.js';
-import { DataHash } from '@unicitylabs/commons/lib/hash/DataHash.js';
 import { SigningService } from '@unicitylabs/commons/lib/signing/SigningService.js';
 import { HexConverter } from '@unicitylabs/commons/lib/util/HexConverter.js';
 
@@ -12,7 +11,7 @@ import { TokenId } from './TokenId.js';
 import { TokenState } from './TokenState.js';
 import { TokenType } from './TokenType.js';
 import { IPredicateFactory } from '../predicate/IPredicateFactory.js';
-import { IMintTransactionDataJson, MintTransactionData } from '../transaction/MintTransactionData.js';
+import { MintTransactionData } from '../transaction/MintTransactionData.js';
 import { ITransactionJson, Transaction } from '../transaction/Transaction.js';
 import { ITransactionDataJson, TransactionData } from '../transaction/TransactionData.js';
 import { TokenCoinData } from './fungible/TokenCoinData.js';
@@ -46,7 +45,7 @@ export class TokenFactory {
     const tokenData = await createData(data.data);
     const coinData = data.coins ? TokenCoinData.fromJSON(data.coins) : null;
 
-    const mintTransaction = await this.createMintTransaction(
+    const mintTransaction = await Transaction.fromMintJSON(
       tokenId,
       tokenType,
       tokenData,
@@ -66,10 +65,11 @@ export class TokenFactory {
     ];
     let previousTransaction: Transaction<MintTransactionData<ISerializable | null> | TransactionData> = mintTransaction;
     for (let i = 1; i < data.transactions.length; i++) {
-      const transaction = await this.createTransaction(
+      const transaction = await Transaction.fromJSON(
         tokenId,
         tokenType,
         data.transactions[i] as ITransactionJson<ITransactionDataJson>,
+        this.predicateFactory,
       );
 
       // TODO: Move address processing to a separate method
@@ -106,81 +106,6 @@ export class TokenFactory {
 
     // TODO: Add nametag tokens
     return new Token(tokenId, tokenType, tokenData, coinData, state, transactions, [], tokenVersion);
-  }
-
-  /**
-   * Create a mint transaction from JSON.
-   * @param tokenId Token identifier
-   * @param tokenType Type of the token
-   * @param tokenData Immutable token data object
-   * @param coinData Fungible coin data, or null if none
-   * @param sourceState Mint source state
-   * @param transaction JSON representation of the mint transaction
-   */
-  private async createMintTransaction(
-    tokenId: TokenId,
-    tokenType: TokenType,
-    tokenData: ISerializable,
-    coinData: TokenCoinData | null,
-    sourceState: RequestId,
-    transaction: ITransactionJson<IMintTransactionDataJson>,
-  ): Promise<Transaction<MintTransactionData<ISerializable | null>>> {
-    return new Transaction(
-      await MintTransactionData.create(
-        tokenId,
-        tokenType,
-        tokenData,
-        coinData,
-        sourceState,
-        transaction.data.recipient,
-        HexConverter.decode(transaction.data.salt),
-        transaction.data.dataHash ? DataHash.fromJSON(transaction.data.dataHash) : null,
-        // TODO: Parse reason properly
-        transaction.data.reason ? this.createMintReason(transaction.data.reason) : null,
-      ),
-      InclusionProof.fromJSON(transaction.inclusionProof),
-    );
-  }
-
-  /** Parse the reason field of a mint transaction (not yet implemented). */
-  private createMintReason(data: unknown): ISerializable {
-    if (typeof data !== 'object' || data == null || !('type' in data)) {
-      throw new Error('MintReason: data is not an object');
-    }
-
-    switch (data.type) {
-      default:
-        throw new Error('NOT IMPLEMENTED');
-    }
-  }
-
-  /**
-   * Create a transaction from JSON data.
-   * @param tokenId Token identifier
-   * @param tokenType Token type
-   * @param data Transaction data to deserialize
-   * @param inclusionProof Transaction inclusion proof
-   * @private
-   */
-  private async createTransaction(
-    tokenId: TokenId,
-    tokenType: TokenType,
-    { data, inclusionProof }: ITransactionJson<ITransactionDataJson>,
-  ): Promise<Transaction<TransactionData>> {
-    return new Transaction(
-      await TransactionData.create(
-        await TokenState.create(
-          await this.predicateFactory.create(tokenId, tokenType, data.sourceState.unlockPredicate),
-          data.sourceState.data ? HexConverter.decode(data.sourceState.data) : null,
-        ),
-        data.recipient,
-        HexConverter.decode(data.salt),
-        data.dataHash ? DataHash.fromJSON(data.dataHash) : null,
-        data.message ? HexConverter.decode(data.message) : null,
-        [], //await Promise.all(data.nameTags.map((input) => this.importToken(input, NameTagTokenData, predicateFactory))),
-      ),
-      InclusionProof.fromJSON(inclusionProof),
-    );
   }
 
   /**
