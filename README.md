@@ -87,7 +87,7 @@ const address = await DirectAddress.fromJSON('DIRECT://582200004d8489e2b1244335a
 
 To use address for minting or to send it someone, reference from predicate is needed:
 ```typescript
-const address = await DirectAddress.create(data.predicate.reference);
+const address = await DirectAddress.create(MaskedPredicate.calculateReference(/* Reference parameters */));
 ```
 
 ### Predicate System
