@@ -127,6 +127,26 @@ const tokenData = new TokenCoinData([
 2. **Transfer**: Submit state transitions between owners
 3. **Completion**: Finalize transfers with new token state
 
+#### Transfer flow
+
+Prerequisites
+Recipient knows some info about token, like token type for generating address.
+
+```text
+A[Start] 
+A --> B[Recipient Generates Address]
+B --> C[Recipient Shares Address with Sender]
+C --> D[Sender Submits Transfer Transaction]
+D --> E[Sender Retrieves Inclusion Proof]
+E --> F[Sender Creates Transaction]
+F --> G[Sender Sends Transaction and Token to Recipient]
+G --> H[Recipient Imports Token and Transaction]
+H --> I[Recipient Verifies Transaction]
+I --> J[Recipient Finishes Transaction]
+J --> K[End]
+```
+
+
 ## Architecture
 
 ### Token Structure
