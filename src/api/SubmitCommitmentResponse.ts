@@ -8,13 +8,23 @@ import { HashAlgorithm } from '@unicitylabs/commons/lib/hash/HashAlgorithm.js';
 import { DataHash } from '@unicitylabs/commons/lib/hash/DataHash.js';
 import { RequestId } from '@unicitylabs/commons/lib/api/RequestId.js';
 
+/**
+ * Possible results from the aggregator when submitting a commitment.
+ */
 export enum SubmitCommitmentStatus {
+  /** The commitment was accepted and stored. */
   SUCCESS = 'SUCCESS',
+  /** Signature verification failed. */
   AUTHENTICATOR_VERIFICATION_FAILED = 'AUTHENTICATOR_VERIFICATION_FAILED',
+  /** Request identifier did not match the payload. */
   REQUEST_ID_MISMATCH = 'REQUEST_ID_MISMATCH',
+  /** A commitment with the same request id already exists. */
   REQUEST_ID_EXISTS = 'REQUEST_ID_EXISTS',
 }
 
+/**
+ * Request object sent by the client to the aggregator.
+ */
 class Request {
   public readonly service: string;
   public readonly method: string;
@@ -93,6 +103,9 @@ export interface ISubmitCommitmentResponseJson {
   signature?: string;
 }
 
+/**
+ * Response object returned by the aggregator on commitment submission.
+ */
 export class SubmitCommitmentResponse {
   public constructor(
     public readonly status: SubmitCommitmentStatus,
@@ -102,6 +115,13 @@ export class SubmitCommitmentResponse {
     public readonly signature?: Signature,
   ) {}
 
+  /**
+   * Parse a JSON response object.
+   *
+   * @param data Raw response
+   * @returns Parsed response
+   * @throws Error if the data does not match the expected shape
+   */
   public static async fromJSON(data: unknown): Promise<SubmitCommitmentResponse> {
     if (!SubmitCommitmentResponse.isJSON(data)) {
       throw new Error('Parsing submit state transition response failed.');
@@ -119,6 +139,11 @@ export class SubmitCommitmentResponse {
     return new SubmitCommitmentResponse(data.status, request, data.algorithm, data.publicKey, data.signature ? Signature.fromJSON(data.signature) : undefined);
   }
 
+  /**
+   * Convert the response to a JSON object.
+   *
+   * @returns JSON representation of the response
+   */
   public toJSON(): ISubmitCommitmentResponseJson {
     const response: ISubmitCommitmentResponseJson = { status: this.status };
     if (this.request) {
@@ -136,10 +161,21 @@ export class SubmitCommitmentResponse {
     return response;
   }
 
+  /**
+   * Check if the given data is a valid JSON response object.
+   *
+   * @param data Raw response
+   * @returns True if the data is a valid JSON response object
+   */
   public static isJSON(data: unknown): data is ISubmitCommitmentResponseJson {
     return typeof data === 'object' && data !== null && 'status' in data && typeof data.status === 'string';
   }
 
+  /**
+   * Verify the receipt of the commitment.
+   *
+   * @returns True if the receipt is valid, false otherwise
+   */
   public async verifyReceipt(): Promise<boolean> {
     if (!this.signature || !this.publicKey || !this.request) {
       return false;
