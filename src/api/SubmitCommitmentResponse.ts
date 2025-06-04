@@ -145,20 +145,13 @@ export class SubmitCommitmentResponse {
    * @returns JSON representation of the response
    */
   public toJSON(): ISubmitCommitmentResponseJson {
-    const response: ISubmitCommitmentResponseJson = { status: this.status };
-    if (this.request) {
-      response.request = this.request.toJSON();
-    }
-    if (this.algorithm) {
-      response.algorithm = this.algorithm;
-    }
-    if (this.publicKey) {
-      response.publicKey = this.publicKey;
-    }
-    if (this.signature) {
-      response.signature = this.signature.toJSON();
-    }
-    return response;
+    return {
+      status: this.status,
+      request: this.request?.toJSON(),
+      algorithm: this.algorithm,
+      publicKey: this.publicKey,
+      signature: this.signature?.toJSON(),
+    };
   }
 
   /**
