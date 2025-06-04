@@ -235,7 +235,10 @@ const updateToken = await client.finishTransaction(
 ### Checking Token Status
 ```typescript
 const status = await client.getTokenStatus(token);
-console.log(`Token is ${status === InclusionProofVerificationStatus.PATH_NOT_INCLUDED ? 'spent' : 'unspent'}`);
+/* 
+  status InclusionProofVerificationStatus.OK is spent
+  status InclusionProofVerificationStatus.PATH_NOT_INCLUDED is unspent
+ */
 ```
 
 ## License
