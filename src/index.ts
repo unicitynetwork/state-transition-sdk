@@ -6,7 +6,6 @@ export * from './address/IAddress.js';
 // API exports
 export * from './api/AggregatorClient.js';
 export * from './api/IAggregatorClient.js';
-export * from './api/SubmitCommitmentResponse.js';
 
 // Predicate exports
 export * from './predicate/BurnPredicate.js';

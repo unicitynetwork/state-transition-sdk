@@ -5,10 +5,10 @@ import { DataHash } from '@unicitylabs/commons/lib/hash/DataHash.js';
 import { HashAlgorithm } from '@unicitylabs/commons/lib/hash/HashAlgorithm.js';
 import { SigningService } from '@unicitylabs/commons/lib/signing/SigningService.js';
 import { HexConverter } from '@unicitylabs/commons/lib/util/HexConverter.js';
+import { SubmitCommitmentStatus } from '@unicitylabs/commons/lib/api/SubmitCommitmentResponse.js';
 
 import { DirectAddress } from './address/DirectAddress.js';
 import { IAggregatorClient } from './api/IAggregatorClient.js';
-import { SubmitCommitmentStatus } from './api/SubmitCommitmentResponse.js';
 import { ISerializable } from './ISerializable.js';
 import { TokenCoinData } from './token/fungible/TokenCoinData.js';
 import { NameTagToken } from './token/NameTagToken.js';

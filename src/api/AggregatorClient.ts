@@ -1,11 +1,12 @@
 import { Authenticator } from '@unicitylabs/commons/lib/api/Authenticator.js';
 import { InclusionProof } from '@unicitylabs/commons/lib/api/InclusionProof.js';
 import { RequestId } from '@unicitylabs/commons/lib/api/RequestId.js';
+import { SubmitCommitmentRequest } from '@unicitylabs/commons/lib/api/SubmitCommitmentRequest.js';
+import { SubmitCommitmentResponse } from '@unicitylabs/commons/lib/api/SubmitCommitmentResponse.js';
 import { DataHash } from '@unicitylabs/commons/lib/hash/DataHash.js';
 import { JsonRpcHttpTransport } from '@unicitylabs/commons/lib/json-rpc/JsonRpcHttpTransport.js';
 
 import { IAggregatorClient } from './IAggregatorClient.js';
-import { SubmitCommitmentResponse, SubmitCommitmentStatus } from './SubmitCommitmentResponse.js';
 
 /**
  * Client implementation for communicating with an aggregator via JSON-RPC.
@@ -29,16 +30,13 @@ export class AggregatorClient implements IAggregatorClient {
     requestId: RequestId,
     transactionHash: DataHash,
     authenticator: Authenticator,
+    receipt: boolean = false,
   ): Promise<SubmitCommitmentResponse> {
-    const data = {
-      authenticator: authenticator.toJSON(),
-      requestId: requestId.toJSON(),
-      transactionHash: transactionHash.toJSON(),
-    };
+    const request = new SubmitCommitmentRequest(requestId, transactionHash, authenticator, receipt);
 
-    await this.transport.request('submit_commitment', data);
-    // TODO: Fix response
-    return new SubmitCommitmentResponse(SubmitCommitmentStatus.SUCCESS);
+    const response = await this.transport.request('submit_commitment', request.toJSON());
+
+    return SubmitCommitmentResponse.fromJSON(response)
   }
 
   /**
