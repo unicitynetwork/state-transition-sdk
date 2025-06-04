@@ -17,19 +17,34 @@ interface IPredicateJson {
   readonly nonce: string;
 }
 
+/**
+ * Predicate representing a permanently burned token.
+ */
 export class BurnPredicate implements IPredicate {
   public readonly type: PredicateType = TYPE;
 
+  /**
+   * @param reference Reference hash identifying the predicate
+   * @param hash      Unique hash of the predicate and token
+   * @param _nonce    Nonce used to ensure uniqueness
+   */
   private constructor(
     public readonly reference: DataHash,
     public readonly hash: DataHash,
     private readonly _nonce: Uint8Array,
   ) {}
 
+  /** @inheritDoc */
   public get nonce(): Uint8Array {
     return new Uint8Array(this._nonce);
   }
 
+  /**
+   * Create a new burn predicate.
+   * @param tokenId Token ID for which the predicate is valid.
+   * @param tokenType Type of the token.
+   * @param nonce Nonce providing uniqueness for the predicate.
+   */
   public static async create(tokenId: TokenId, tokenType: TokenType, nonce: Uint8Array): Promise<BurnPredicate> {
     const reference = await BurnPredicate.calculateReference(tokenType);
     const hash = await BurnPredicate.calculateHash(reference, tokenId, nonce);
@@ -37,34 +52,53 @@ export class BurnPredicate implements IPredicate {
     return new BurnPredicate(reference, hash, nonce);
   }
 
-  public static async fromJSON(tokenId: TokenId, tokenType: TokenType, data: unknown): Promise<BurnPredicate> {
+  /**
+   * Create a burn predicate from JSON data.
+   * @param tokenId Token ID for which the predicate is valid.
+   * @param tokenType Type of the token.
+   * @param data JSON data representing the burn predicate.
+   */
+  public static fromJSON(tokenId: TokenId, tokenType: TokenType, data: unknown): Promise<BurnPredicate> {
     if (!BurnPredicate.isJSON(data)) {
       throw new Error('Invalid burn predicate json');
     }
 
-    const nonce = HexConverter.decode(data.nonce);
-    const reference = await BurnPredicate.calculateReference(tokenType);
-    const hash = await BurnPredicate.calculateHash(reference, tokenId, nonce);
-
-    return new BurnPredicate(reference, hash, nonce);
+    return BurnPredicate.create(tokenId, tokenType, HexConverter.decode(data.nonce));
   }
 
+  /**
+   * Calculate the reference hash for a burn predicate.
+   * @param tokenType Type of the token for which the predicate is valid.
+   */
   public static calculateReference(tokenType: TokenType): Promise<DataHash> {
     return new DataHasher(HashAlgorithm.SHA256)
       .update(CborEncoder.encodeArray([CborEncoder.encodeTextString(TYPE), tokenType.toCBOR()]))
       .digest();
   }
 
+  /**
+   * Check if the provided data is a valid JSON representation of a burn predicate.
+   * @param data Data to validate.
+   * @private
+   */
   private static isJSON(data: unknown): data is IPredicateJson {
     return typeof data === 'object' && data !== null && 'nonce' in data && typeof data.nonce === 'string';
   }
 
+  /**
+   * Compute the predicate hash for a specific token and nonce.
+   * @param reference Reference hash of the predicate.
+   * @param tokenId Token ID for which the predicate is valid.
+   * @param nonce Nonce providing uniqueness for the predicate.
+   * @private
+   */
   private static calculateHash(reference: DataHash, tokenId: TokenId, nonce: Uint8Array): Promise<DataHash> {
     return new DataHasher(HashAlgorithm.SHA256)
       .update(CborEncoder.encodeArray([reference.toCBOR(), tokenId.toCBOR(), CborEncoder.encodeByteString(nonce)]))
       .digest();
   }
 
+  /** @inheritDoc */
   public toJSON(): IPredicateJson {
     return {
       nonce: HexConverter.encode(this._nonce),
@@ -72,20 +106,24 @@ export class BurnPredicate implements IPredicate {
     };
   }
 
+  /** @inheritDoc */
   public toCBOR(): Uint8Array {
     return CborEncoder.encodeArray([CborEncoder.encodeTextString(this.type)]);
   }
 
+  /** @inheritDoc */
   public verify(): Promise<boolean> {
     return Promise.resolve(false);
   }
 
+  /** Convert instance to readable string */
   public toString(): string {
     return dedent`
           Predicate[${this.type}]:
             Hash: ${this.hash.toString()}`;
   }
 
+  /** @inheritDoc */
   public isOwner(): Promise<boolean> {
     return Promise.resolve(false);
   }

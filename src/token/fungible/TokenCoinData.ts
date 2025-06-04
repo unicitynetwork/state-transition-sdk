@@ -5,19 +5,28 @@ import { dedent } from '@unicitylabs/commons/lib/util/StringUtils.js';
 import { CoinId } from './CoinId.js';
 import { ISerializable } from '../../ISerializable.js';
 
+/** JSON representation for coin balances. */
 export type TokenCoinDataJson = [string, string][];
 
+/**
+ * Container for fungible coin balances attached to a token.
+ */
 export class TokenCoinData implements ISerializable {
   private readonly _coins: Map<string, bigint>;
 
+  /**
+   * @param coins Array of coin id and balance pairs
+   */
   public constructor(coins: [CoinId, bigint][]) {
     this._coins = new Map(coins.map(([key, value]) => [key.toJSON(), value]));
   }
 
+  /** List of coins held. */
   public get coins(): [CoinId, bigint][] {
     return Array.from(this._coins.entries()).map(([key, value]) => [CoinId.fromDto(key), value]);
   }
 
+  /** Create a coin data object from CBOR. */
   public static fromCBOR(data: Uint8Array): TokenCoinData {
     const coins: [CoinId, bigint][] = [];
     const entries = CborDecoder.readArray(data);
@@ -29,6 +38,7 @@ export class TokenCoinData implements ISerializable {
     return new TokenCoinData(coins);
   }
 
+  /** Parse from a JSON representation. */
   public static fromJSON(data: unknown): TokenCoinData {
     if (!Array.isArray(data)) {
       throw new Error('Invalid coin data JSON format');
@@ -42,6 +52,7 @@ export class TokenCoinData implements ISerializable {
     return new TokenCoinData(coins);
   }
 
+  /** @inheritDoc */
   public toCBOR(): Uint8Array {
     return CborEncoder.encodeArray(
       Array.from(this._coins.entries()).map(([key, value]) =>
@@ -50,10 +61,12 @@ export class TokenCoinData implements ISerializable {
     );
   }
 
+  /** @inheritDoc */
   public toJSON(): TokenCoinDataJson {
     return Array.from(this._coins.entries()).map(([key, value]) => [key, value.toString()]);
   }
 
+  /** Convert instance to readable string */
   public toString(): string {
     return dedent`
       FungibleTokenData

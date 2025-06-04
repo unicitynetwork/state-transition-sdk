@@ -7,7 +7,13 @@ import { UnmaskedPredicate } from './UnmaskedPredicate.js';
 import { TokenId } from '../token/TokenId.js';
 import { TokenType } from '../token/TokenType.js';
 
+/**
+ * Default implementation of {@link IPredicateFactory}.
+ */
 export class PredicateFactory implements IPredicateFactory {
+  /**
+   * @inheritDoc
+   */
   public create(tokenId: TokenId, tokenType: TokenType, data: IPredicateJson): Promise<IPredicate> {
     switch (data.type) {
       case PredicateType.BURN:

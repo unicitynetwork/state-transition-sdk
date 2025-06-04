@@ -13,7 +13,18 @@ import { TokenType } from '../token/TokenType.js';
 
 const TYPE = PredicateType.MASKED;
 
+/**
+ * Predicate for masked address transaction.
+ */
 export class MaskedPredicate extends DefaultPredicate {
+  /**
+   * @param publicKey     Owner public key
+   * @param algorithm     Transaction signing algorithm
+   * @param hashAlgorithm Transaction hash algorithm
+   * @param nonce         Nonce used in the predicate
+   * @param reference     Predicate reference
+   * @param hash          Predicate hash
+   */
   private constructor(
     publicKey: Uint8Array,
     algorithm: string,
@@ -25,6 +36,14 @@ export class MaskedPredicate extends DefaultPredicate {
     super(TYPE, publicKey, algorithm, hashAlgorithm, nonce, reference, hash);
   }
 
+  /**
+   * Create a new masked predicate for the given owner.
+   * @param tokenId token ID.
+   * @param tokenType token type.
+   * @param signingService Token owner's signing service.
+   * @param hashAlgorithm Hash algorithm used to hash transaction.
+   * @param nonce Nonce value used during creation, providing uniqueness.
+   */
   public static async create(
     tokenId: TokenId,
     tokenType: TokenType,
@@ -51,6 +70,12 @@ export class MaskedPredicate extends DefaultPredicate {
     );
   }
 
+  /**
+   * Create a masked predicate from JSON data.
+   * @param tokenId Token ID.
+   * @param tokenType Token type.
+   * @param data JSON data representing the masked predicate.
+   */
   public static async fromJSON(tokenId: TokenId, tokenType: TokenType, data: unknown): Promise<MaskedPredicate> {
     if (!DefaultPredicate.isJSON(data)) {
       throw new Error('Invalid one time address predicate json');
@@ -70,6 +95,14 @@ export class MaskedPredicate extends DefaultPredicate {
     return new MaskedPredicate(publicKey, data.algorithm, data.hashAlgorithm, nonce, reference, hash);
   }
 
+  /**
+   * Compute the predicate reference.
+   * @param tokenType token type.
+   * @param algorithm Signing algorithm.
+   * @param publicKey Owner's public key.
+   * @param hashAlgorithm Hash algorithm used for signing.
+   * @param nonce Nonce providing uniqueness for the predicate.
+   */
   public static calculateReference(
     tokenType: TokenType,
     algorithm: string,
@@ -91,6 +124,12 @@ export class MaskedPredicate extends DefaultPredicate {
       .digest();
   }
 
+  /**
+   * Compute the predicate hash for a specific token and nonce.
+   * @param reference Reference hash of the predicate.
+   * @param tokenId Token ID.
+   * @private
+   */
   private static calculateHash(reference: DataHash, tokenId: TokenId): Promise<DataHash> {
     return new DataHasher(HashAlgorithm.SHA256)
       .update(CborEncoder.encodeArray([reference.toCBOR(), tokenId.toCBOR()]))

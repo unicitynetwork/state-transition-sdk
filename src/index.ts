@@ -2,7 +2,6 @@
 export * from './address/AddressScheme.js';
 export * from './address/DirectAddress.js';
 export * from './address/IAddress.js';
-export * from './address/NameTagAddress.js';
 
 // API exports
 export * from './api/AggregatorClient.js';
