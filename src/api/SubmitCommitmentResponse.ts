@@ -16,11 +16,11 @@ export enum SubmitCommitmentStatus {
 }
 
 class Request {
-  public service: string;
-  public method: string;
-  public requestId: RequestId;
-  public stateHash: DataHash;
-  public transactionHash: DataHash;
+  public readonly service: string;
+  public readonly method: string;
+  public readonly requestId: RequestId;
+  public readonly stateHash: DataHash;
+  public readonly transactionHash: DataHash;
   public readonly hash: DataHash;
 
   private constructor(service: string, method: string, requestId: RequestId, stateHash: DataHash, transactionHash: DataHash, hash: DataHash) {
@@ -55,7 +55,7 @@ class Request {
     ]);
   }
 
-  public toJSON(): IRequestJSON {
+  public toJSON(): IRequestJson {
     return {
       service: this.service,
       method: this.method,
@@ -77,7 +77,7 @@ class Request {
   }
 }
 
-export interface IRequestJSON {
+export interface IRequestJson {
   service: string;
   method: string;
   requestId: string;
@@ -85,9 +85,9 @@ export interface IRequestJSON {
   transactionHash: string;
 }
 
-export interface ISubmitCommitmentResponseJSON {
+export interface ISubmitCommitmentResponseJson {
   readonly status: SubmitCommitmentStatus;
-  request?: IRequestJSON;
+  request?: IRequestJson;
   algorithm?: string;
   publicKey?: string;
   signature?: string;
@@ -119,8 +119,8 @@ export class SubmitCommitmentResponse {
     return new SubmitCommitmentResponse(data.status, request, data.algorithm, data.publicKey, data.signature ? Signature.fromJSON(data.signature) : undefined);
   }
 
-  public toJSON(): ISubmitCommitmentResponseJSON {
-    const response: ISubmitCommitmentResponseJSON = { status: this.status };
+  public toJSON(): ISubmitCommitmentResponseJson {
+    const response: ISubmitCommitmentResponseJson = { status: this.status };
     if (this.request) {
       response.request = this.request.toJSON();
     }
@@ -136,7 +136,7 @@ export class SubmitCommitmentResponse {
     return response;
   }
 
-  public static isJSON(data: unknown): data is ISubmitCommitmentResponseJSON {
+  public static isJSON(data: unknown): data is ISubmitCommitmentResponseJson {
     return typeof data === 'object' && data !== null && 'status' in data && typeof data.status === 'string';
   }
 
