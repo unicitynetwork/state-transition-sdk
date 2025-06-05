@@ -1,6 +1,5 @@
-import { InclusionProof, InclusionProofVerificationStatus } from '@unicitylabs/commons/lib/api/InclusionProof.js';
+import { InclusionProofVerificationStatus } from '@unicitylabs/commons/lib/api/InclusionProof.js';
 import { RequestId } from '@unicitylabs/commons/lib/api/RequestId.js';
-import { DataHash } from '@unicitylabs/commons/lib/hash/DataHash.js';
 import { SigningService } from '@unicitylabs/commons/lib/signing/SigningService.js';
 import { HexConverter } from '@unicitylabs/commons/lib/util/HexConverter.js';
 
@@ -12,9 +11,9 @@ import { TokenId } from './TokenId.js';
 import { TokenState } from './TokenState.js';
 import { TokenType } from './TokenType.js';
 import { IPredicateFactory } from '../predicate/IPredicateFactory.js';
-import { IMintTransactionDataJson, MintTransactionData } from '../transaction/MintTransactionData.js';
-import { ITransactionDto, Transaction } from '../transaction/Transaction.js';
-import { ITransactionDataDto, TransactionData } from '../transaction/TransactionData.js';
+import { MintTransactionData } from '../transaction/MintTransactionData.js';
+import { ITransactionJson, Transaction } from '../transaction/Transaction.js';
+import { ITransactionDataJson, TransactionData } from '../transaction/TransactionData.js';
 import { TokenCoinData } from './fungible/TokenCoinData.js';
 import { CborEncoder } from '@unicitylabs/commons/lib/cbor/CborEncoder.js';
 import { Path, SumPath, IPathJson, ISumPathJson, HashOptions } from '@unicitylabs/prefix-hash-tree';
@@ -35,9 +34,21 @@ const hashOptions: HashOptions = {
   algorithm: HashAlgorithm.SHA256
 };
 
+/**
+ * Utility for constructing tokens from their serialized form.
+ */
 export class TokenFactory {
+  /**
+   * @param predicateFactory Factory used to deserialize predicates
+   */
   public constructor(private readonly predicateFactory: IPredicateFactory) {}
 
+  /**
+   * Deserialize a token from JSON.
+   *
+   * @param data       Token JSON representation
+   * @param createData Callback producing the custom token data object
+   */
   public async create<TD extends ISerializable>(
     data: ITokenJson,
     createData: (data: unknown) => Promise<TD>,
@@ -52,13 +63,14 @@ export class TokenFactory {
     const tokenData: TD = await createData(data.data);
     const coinData = data.coins ? TokenCoinData.fromJSON(data.coins) : null;
 
-    const mintTransaction = await this.createMintTransaction(
+    const mintTransaction = await Transaction.fromMintJSON(
       tokenId,
       tokenType,
       tokenData,
       coinData,
       await RequestId.createFromImprint(tokenId.encode(), MINT_SUFFIX),
       data.transactions[0],
+      this
     );
 
     const signingService = await SigningService.createFromSecret(MINTER_SECRET, tokenId.encode());
@@ -72,10 +84,11 @@ export class TokenFactory {
     ];
     let previousTransaction: Transaction<MintTransactionData<ISerializable | null> | TransactionData> = mintTransaction;
     for (let i = 1; i < data.transactions.length; i++) {
-      const transaction = await this.createTransaction(
+      const transaction = await Transaction.fromJSON(
         tokenId,
         tokenType,
-        data.transactions[i] as ITransactionDto<ITransactionDataDto>,
+        data.transactions[i] as ITransactionJson<ITransactionDataJson>,
+        this.predicateFactory,
       );
 
       // TODO: Move address processing to a separate method
@@ -114,67 +127,13 @@ export class TokenFactory {
     return new Token(tokenId, tokenType, tokenData, coinData, state, transactions, [], tokenVersion);
   }
 
-  public async createMintTransaction<MTD extends MintTransactionData<ISerializable | null>>(
-    tokenId: TokenId,
-    tokenType: TokenType,
-    tokenData: ISerializable,
-    coinData: TokenCoinData | null,
-    sourceState: RequestId,
-    transaction: ITransactionDto<IMintTransactionDataJson>,
-  ): Promise<Transaction<MintTransactionData<ISerializable | null>>> {
-    return new Transaction(
-      await MintTransactionData.create(
-        tokenId,
-        tokenType,
-        tokenData,
-        coinData,
-        sourceState,
-        transaction.data.recipient,
-        HexConverter.decode(transaction.data.salt),
-        transaction.data.dataHash ? DataHash.fromJSON(transaction.data.dataHash) : null,
-        // TODO: Parse reason properly
-        transaction.data.reason ? await this.createMintReason(transaction.data.reason) : null,
-      ),
-      InclusionProof.fromJSON(transaction.inclusionProof),
-    );
-  }
-
-  private async createMintReason(data: unknown): Promise<ISerializable> {
-    if (typeof data !== 'object' || data == null || !('type' in data)) {
-      throw new Error('MintReason: data is not an object');
-    }
-
-    switch (data.type as MintReasonType) {
-      case MintReasonType.TOKEN_SPLIT:
-        const createData = async (data: unknown): Promise<Uint8ArrayTokenData> => new Uint8ArrayTokenData(HexConverter.decode(data as string));
-        return await SplitProof.fromJSON(data as ISplitProofJson, this, createData);
-      default:
-        throw new Error('NOT IMPLEMENTED');
-    }
-  }
-
-  private async createTransaction(
-    tokenId: TokenId,
-    tokenType: TokenType,
-    { data, inclusionProof }: ITransactionDto<ITransactionDataDto>,
-  ): Promise<Transaction<TransactionData>> {
-    return new Transaction(
-      await TransactionData.create(
-        await TokenState.create(
-          await this.predicateFactory.create(tokenId, tokenType, data.sourceState.unlockPredicate),
-          data.sourceState.data ? HexConverter.decode(data.sourceState.data) : null,
-        ),
-        data.recipient,
-        HexConverter.decode(data.salt),
-        data.dataHash ? DataHash.fromJSON(data.dataHash) : null,
-        data.message ? HexConverter.decode(data.message) : null,
-        [], //await Promise.all(data.nameTags.map((input) => this.importToken(input, NameTagTokenData, predicateFactory))),
-      ),
-      InclusionProof.fromJSON(inclusionProof),
-    );
-  }
-
-  private async verifyMintTransaction(
+  /**
+   * Verify a mint transaction integrity and validate against public key.
+   * @param transaction Mint transaction
+   * @param publicKey Public key of the minter
+   * @private
+   */
+  private async verifyMintTransaction<TD extends ISerializable>(
     transaction: Transaction<MintTransactionData<ISerializable | null>>,
     publicKey: Uint8Array,
     coinData: TokenCoinData | null,
@@ -204,7 +163,7 @@ export class TokenFactory {
         return false; 
       }
       const coinIds: string[] = new Array();
-      const splitProof: SplitProof<Uint8ArrayTokenData, MintTransactionData<ISerializable>> = transaction.data.reason;
+      const splitProof: SplitProof<TD, MintTransactionData<ISerializable>> = transaction.data.reason;
       for (let [coinId, [path, sumPath]] of splitProof.burnProofsByCoinId) {
         coinIds.push(coinId);
 
@@ -338,36 +297,5 @@ export class SplitProof<TD extends ISerializable, MTD extends MintTransactionDat
 
   public toString(): string {
     return this.burnedToken.toString();
-  }
-}
-
-export class Uint8ArrayTokenData implements ISerializable {
-  public constructor(private readonly _data: Uint8Array) {
-    this._data = new Uint8Array(_data);
-  }
-
-  public get data(): Uint8Array {
-    return new Uint8Array(this._data);
-  }
-
-  public static fromJSON(data: unknown): Promise<Uint8ArrayTokenData> {
-    if (typeof data !== 'string') {
-      throw new Error('Invalid test token data');
-    }
-
-    return Promise.resolve(new Uint8ArrayTokenData(HexConverter.decode(data)));
-  }
-
-  public toJSON(): string {
-    return HexConverter.encode(this._data);
-  }
-
-  public toCBOR(): Uint8Array {
-    return this.data;
-  }
-
-  public toString(): string {
-    return dedent`
-      TestTokenData: ${HexConverter.encode(this.data)}`;
   }
 }

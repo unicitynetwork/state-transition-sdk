@@ -1,13 +1,9 @@
-import { InclusionProof, InclusionProofVerificationStatus } from '@unicitylabs/commons/lib/api/InclusionProof.js';
 import { DataHasher } from '@unicitylabs/commons/lib/hash/DataHasher.js';
 import { NodeDataHasher } from '@unicitylabs/commons/lib/hash/NodeDataHasher.js';
 import { DataHasherFactory } from '@unicitylabs/commons/lib/hash/DataHasherFactory.js';
 import { HashAlgorithm } from '@unicitylabs/commons/lib/hash/HashAlgorithm.js';
-import { JsonRpcNetworkError } from '@unicitylabs/commons/lib/json-rpc/JsonRpcNetworkError.js';
 import { SigningService } from '@unicitylabs/commons/lib/signing/SigningService.js';
 import { SparseMerkleTree } from '@unicitylabs/commons/lib/smt/SparseMerkleTree.js';
-import { HexConverter } from '@unicitylabs/commons/lib/util/HexConverter.js';
-import { dedent } from '@unicitylabs/commons/lib/util/StringUtils.js';
 
 import { DirectAddress } from '../../src/address/DirectAddress.js';
 import { ISerializable } from '../../src/ISerializable.js';
@@ -22,19 +18,21 @@ import { SplitProof, TokenFactory, Uint8ArrayTokenData } from '../../src/token/T
 import { TokenId } from '../../src/token/TokenId.js';
 import { TokenState } from '../../src/token/TokenState.js';
 import { TokenType } from '../../src/token/TokenType.js';
-import { Commitment } from '../../src/transaction/Commitment.js';
 import { MintTransactionData } from '../../src/transaction/MintTransactionData.js';
-import { TransactionData } from '../../src/transaction/TransactionData.js';
+import { ITransactionJson, Transaction } from '../../src/transaction/Transaction.js';
+import { ITransactionDataJson, TransactionData } from '../../src/transaction/TransactionData.js';
+import { waitInclusionProof } from '../InclusionProofUtils.js';
 import { TestAggregatorClient } from '../TestAggregatorClient.js';
 import { CborEncoder } from '@unicitylabs/commons/lib/cbor/CborEncoder.js';
 import { HashOptions, Path } from '@unicitylabs/prefix-hash-tree/lib/smt.js';
 import { BigintConverter } from '@unicitylabs/commons/lib/util/BigintConverter.js';
 import { IPathJson, ISumPathJson } from '@unicitylabs/prefix-hash-tree/lib/index.js';
 import { SumPath } from '@unicitylabs/prefix-hash-tree/lib/sumtree.js';
+import { TestTokenData } from '../TestTokenData.js';
 
 const textEncoder = new TextEncoder();
 
-interface IMintTokenData {
+interface IMintData {
   tokenId: TokenId;
   tokenType: TokenType;
   tokenData: Uint8ArrayTokenData;
@@ -45,54 +43,7 @@ interface IMintTokenData {
   predicate: MaskedPredicate;
 }
 
-class SleepError extends Error {
-  public constructor(message: string) {
-    super(message);
-    this.name = 'SleepError';
-  }
-}
-
-function sleep(ms: number, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(resolve, ms);
-    signal.addEventListener(
-      'abort',
-      () => {
-        clearTimeout(timeout);
-        reject(signal.reason);
-      },
-      { once: true },
-    );
-  });
-}
-
-async function waitInclusionProof(
-  client: StateTransitionClient,
-  commitment: Commitment<TransactionData | MintTransactionData<ISerializable | null>>,
-  signal: AbortSignal = AbortSignal.timeout(10000),
-  interval: number = 1000,
-): Promise<InclusionProof> {
-  while (true) {
-    try {
-      const inclusionProof = await client.getInclusionProof(commitment);
-      if ((await inclusionProof.verify(commitment.requestId.toBigInt())) === InclusionProofVerificationStatus.OK) {
-        return inclusionProof;
-      }
-    } catch (err) {
-      if (!(err instanceof JsonRpcNetworkError && err.status === 404)) {
-        throw err;
-      }
-    }
-
-    try {
-      await sleep(interval, signal);
-    } catch (err) {
-      throw new SleepError(String(err || 'Sleep was aborted'));
-    }
-  }
-}
-
-async function createMintTokenData(secret: Uint8Array, coinData: TokenCoinData): Promise<IMintTokenData> {
+async function createMintData(secret: Uint8Array, coinData: TokenCoinData): Promise<IMintData> {
   const tokenId = TokenId.create(crypto.getRandomValues(new Uint8Array(32)));
   const tokenType = TokenType.create(crypto.getRandomValues(new Uint8Array(32)));
   const tokenData = new Uint8ArrayTokenData(crypto.getRandomValues(new Uint8Array(32)));
@@ -145,42 +96,73 @@ async function createMintTokenDataForSplit(tokenId: TokenId, secret: Uint8Array,
   };
 }
 
+async function mintToken(
+  client: StateTransitionClient,
+  data: IMintData,
+): Promise<Token<TestTokenData, MintTransactionData<null>>> {
+  const mintCommitment = await client.submitMintTransaction(
+    await DirectAddress.create(data.predicate.reference),
+    data.tokenId,
+    data.tokenType,
+    data.tokenData,
+    data.coinData,
+    data.salt,
+    await new DataHasher(HashAlgorithm.SHA256).update(data.data).digest(),
+    null,
+  );
+
+  const mintTransaction = await client.createTransaction(
+    mintCommitment,
+    await waitInclusionProof(client, mintCommitment),
+  );
+
+  return new Token(
+    data.tokenId,
+    data.tokenType,
+    data.tokenData,
+    data.coinData,
+    await TokenState.create(data.predicate, data.data),
+    [mintTransaction],
+  );
+}
+
+async function sendToken(
+  client: StateTransitionClient,
+  token: Token<ISerializable, MintTransactionData<ISerializable | null>>,
+  signingService: SigningService,
+  recipient: DirectAddress,
+): Promise<Transaction<TransactionData>> {
+  const transactionData = await TransactionData.create(
+    token.state,
+    recipient.toJSON(),
+    crypto.getRandomValues(new Uint8Array(32)),
+    await new DataHasher(HashAlgorithm.SHA256).update(textEncoder.encode('my custom data')).digest(),
+    textEncoder.encode('my message'),
+    token.nametagTokens,
+  );
+
+  const commitment = await client.submitTransaction(transactionData, signingService);
+  return await client.createTransaction(commitment, await waitInclusionProof(client, commitment));
+}
+
+const initialOwnerSecret = new TextEncoder().encode('secret');
+const receiverSecret = new TextEncoder().encode('tere');
+
 describe('Transition', function () {
   it('should verify the token latest state', async () => {
     const client = new StateTransitionClient(new TestAggregatorClient(new SparseMerkleTree(HashAlgorithm.SHA256)));
-    const secret = new TextEncoder().encode('secret');
-    const coinData = new TokenCoinData([
+    const data = await createMintData(initialOwnerSecret, new TokenCoinData([
       [new CoinId(crypto.getRandomValues(new Uint8Array(32))), BigInt(Math.round(Math.random() * 90)) + 10n],
       [new CoinId(crypto.getRandomValues(new Uint8Array(32))), BigInt(Math.round(Math.random() * 90)) + 10n],
-    ]);
-    const mintTokenData = await createMintTokenData(secret, coinData);
-    const mintCommitment = await client.submitMintTransaction(
-      await DirectAddress.create(mintTokenData.predicate.reference),
-      mintTokenData.tokenId,
-      mintTokenData.tokenType,
-      mintTokenData.tokenData,
-      mintTokenData.coinData,
-      mintTokenData.salt,
-      await new DataHasher(HashAlgorithm.SHA256).update(mintTokenData.data).digest(),
-      null,
+    ]));
+    const token = await mintToken(client, data);
+    await expect(DirectAddress.create(data.predicate.reference)).resolves.toEqual(
+      await DirectAddress.fromJSON(token.transactions[0].data.recipient),
     );
 
-    const mintTransaction = await client.createTransaction(
-      mintCommitment,
-      await waitInclusionProof(client, mintCommitment),
-    );
-
-    const token = new Token(
-      mintTokenData.tokenId,
-      mintTokenData.tokenType,
-      mintTokenData.tokenData,
-      mintTokenData.coinData,
-      await TokenState.create(mintTokenData.predicate, mintTokenData.data),
-      [mintTransaction],
-    );
-
+    // Recipient prepares the info for the transfer
     const nonce = crypto.getRandomValues(new Uint8Array(32));
-    const signingservice = await SigningService.createFromSecret(new TextEncoder().encode('tere'), nonce);
+    const signingservice = await SigningService.createFromSecret(receiverSecret, nonce);
     const recipientPredicate = await MaskedPredicate.create(
       token.id,
       token.type,
@@ -188,31 +170,44 @@ describe('Transition', function () {
       HashAlgorithm.SHA256,
       nonce,
     );
-    const recipient = await DirectAddress.create(recipientPredicate.reference);
 
-    const transactionData = await TransactionData.create(
-      token.state,
-      recipient.toJSON(),
-      crypto.getRandomValues(new Uint8Array(32)),
-      await new DataHasher(HashAlgorithm.SHA256).update(textEncoder.encode('my custom data')).digest(),
-      textEncoder.encode('my message'),
-      token.nametagTokens,
-    );
-
-    const commitment = await client.submitTransaction(
-      transactionData,
-      await SigningService.createFromSecret(secret, mintTokenData.predicate.nonce),
-    );
-    const transaction = await client.createTransaction(commitment, await waitInclusionProof(client, commitment));
-
-    const updateToken = await client.finishTransaction(
+    // Create transfer transaction
+    const transaction = await sendToken(
+      client,
       token,
-      await TokenState.create(recipientPredicate, textEncoder.encode('my custom data')),
-      transaction,
+      await SigningService.createFromSecret(initialOwnerSecret, data.nonce),
+      await DirectAddress.create(recipientPredicate.reference),
     );
+
+    const tokenFactory = new TokenFactory(new PredicateFactory());
+
+    // Recipient imports token
+    const importedToken = await tokenFactory.create(token.toJSON(), TestTokenData.fromJSON);
+    // Recipient gets transaction from sender
+    const importedTransaction = await Transaction.fromJSON(
+      importedToken.id,
+      importedToken.type,
+      transaction.toJSON() as ITransactionJson<ITransactionDataJson>,
+      new PredicateFactory(),
+    );
+
+    // Finish the transaction with the recipient predicate
+    const updateToken = await client.finishTransaction(
+      importedToken,
+      await TokenState.create(recipientPredicate, textEncoder.encode('my custom data')),
+      importedTransaction,
+    );
+
+    const signingService = await SigningService.createFromSecret(receiverSecret, token.state.unlockPredicate.nonce);
+    expect(importedToken.state.unlockPredicate.isOwner(signingService.publicKey)).toBeTruthy();
+    expect(updateToken.id).toEqual(token.id);
+    expect(updateToken.type).toEqual(token.type);
+    expect(updateToken.data.toJSON()).toEqual(token.data.toJSON());
+    expect(updateToken.coins?.toJSON()).toEqual(token.coins?.toJSON());
 
     console.log(JSON.stringify(updateToken.toJSON()));
   }, 15000);
+<<<<<<< HEAD
 
   it('should split tokens', async () => {
     // First, let's mint a token in the usual way.
@@ -353,61 +348,4 @@ describe('Transition', function () {
     const flow = {token, transaction}
     return pretify?JSON.stringify(flow, null, 4):JSON.stringify(flow);
   }
-
-  it('should import token and be able to send it', async () => {
-    // Let's modify this test to use a more focused approach without relying on the full token JSON
-    const client = new StateTransitionClient(new TestAggregatorClient(new SparseMerkleTree(HashAlgorithm.SHA256)));
-    const secret = new TextEncoder().encode('secret');
-    const coinData = new TokenCoinData([
-      [new CoinId(crypto.getRandomValues(new Uint8Array(32))), BigInt(Math.round(Math.random() * 90)) + 10n],
-      [new CoinId(crypto.getRandomValues(new Uint8Array(32))), BigInt(Math.round(Math.random() * 90)) + 10n],
-    ]);
-    const mintTokenData = await createMintTokenData(secret, coinData);
-    
-    // Create a token directly using the first test's approach since we know that works
-    const mintCommitment = await client.submitMintTransaction(
-      await DirectAddress.create(mintTokenData.predicate.reference),
-      mintTokenData.tokenId,
-      mintTokenData.tokenType,
-      mintTokenData.tokenData,
-      mintTokenData.coinData,
-      mintTokenData.salt,
-      await new DataHasher(HashAlgorithm.SHA256).update(mintTokenData.data).digest(),
-      null,
-    );
-
-    const mintTransaction = await client.createTransaction(
-      mintCommitment,
-      await waitInclusionProof(client, mintCommitment),
-    );
-
-    const token = new Token(
-      mintTokenData.tokenId,
-      mintTokenData.tokenType,
-      mintTokenData.tokenData,
-      mintTokenData.coinData,
-      await TokenState.create(mintTokenData.predicate, mintTokenData.data),
-      [mintTransaction],
-    );
-
-    const signingservice = await SigningService.createFromSecret(
-      secret,
-      token.state.unlockPredicate.nonce,
-    );
-
-    expect(token.state.unlockPredicate.isOwner(signingservice.publicKey)).toBeTruthy();
-    
-    // Test the token's functionality
-    expect(token.id).toBeDefined();
-    expect(token.type).toBeDefined();
-    expect(token.data).toBeDefined();
-    expect(token.state).toBeDefined();
-    expect(token.transactions.length).toBeGreaterThan(0);
-    
-    console.log(token.toString());
-  }, 15000);
 });
-
-export async function sha256(value: Uint8Array): Promise<Uint8Array<ArrayBufferLike>> {
-  return (await new NodeDataHasher(HashAlgorithm.SHA256).update(value).digest()).data;
-}

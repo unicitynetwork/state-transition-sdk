@@ -11,6 +11,7 @@ import { TokenCoinData } from '../token/fungible/TokenCoinData.js';
 import { TokenId } from '../token/TokenId.js';
 import { TokenType } from '../token/TokenType.js';
 
+/** JSON representation of {@link MintTransactionData}. */
 export interface IMintTransactionDataJson {
   readonly recipient: string;
   readonly salt: string;
@@ -18,7 +19,18 @@ export interface IMintTransactionDataJson {
   readonly reason: unknown | null;
 }
 
+/**
+ * Data object describing a token mint operation.
+ */
 export class MintTransactionData<R extends ISerializable | null> {
+  /**
+   * @param hash        Hash of the encoded transaction
+   * @param sourceState Pseudo input state used for the mint
+   * @param recipient   Address of the first owner
+   * @param _salt       Random salt used to derive predicates
+   * @param dataHash    Optional metadata hash
+   * @param reason      Optional reason object
+   */
   private constructor(
     public readonly hash: DataHash,
     public readonly sourceState: RequestId,
@@ -30,14 +42,28 @@ export class MintTransactionData<R extends ISerializable | null> {
     this._salt = new Uint8Array(_salt);
   }
 
+  /** Salt used during predicate creation. */
   public get salt(): Uint8Array {
     return new Uint8Array(this._salt);
   }
 
+  /** Hash algorithm of the transaction hash. */
   public get hashAlgorithm(): HashAlgorithm {
     return this.hash.algorithm;
   }
 
+  /**
+   * Create a new mint transaction data object.
+   * @param tokenId Token identifier
+   * @param tokenType Token type identifier
+   * @param tokenData Token data object
+   * @param coinData Fungible coin data, or null if none
+   * @param sourceState Mint source state
+   * @param recipient Address of the first token owner
+   * @param salt User selected salt
+   * @param dataHash Hash pointing to next state data
+   * @param reason Reason object attached to the mint
+   */
   public static async create<R extends ISerializable | null>(
     tokenId: TokenId,
     tokenType: TokenType,
@@ -73,6 +99,7 @@ export class MintTransactionData<R extends ISerializable | null> {
     );
   }
 
+  /** Serialize this object to JSON object. */
   public toJSON(): IMintTransactionDataJson {
     return {
       dataHash: this.dataHash?.toJSON() ?? null,
@@ -82,6 +109,7 @@ export class MintTransactionData<R extends ISerializable | null> {
     };
   }
 
+  /** Serialize this object to CBOR. */
   public toCBOR(): Uint8Array {
     return CborEncoder.encodeArray([
       CborEncoder.encodeTextString(this.recipient),
@@ -91,6 +119,7 @@ export class MintTransactionData<R extends ISerializable | null> {
     ]);
   }
 
+  /** Convert instance to readable string */
   public toString(): string {
     return dedent`
       MintTransactionData:
