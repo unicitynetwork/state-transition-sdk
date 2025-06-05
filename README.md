@@ -158,8 +158,16 @@ npm run build
 
 ### Testing
 
+Run all tests except e2e tests.
+
 ```bash
 npm test
+```
+
+Run e2e tests.
+
+```bash
+AGGREGATOR_URL='https://aggregator.devnet.alphabill.org' npm run test:e2e
 ```
 
 ### Linting

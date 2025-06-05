@@ -11,8 +11,11 @@
     "build:check": "tsc --noEmit",
     "lint": "eslint \"src/**/*\"",
     "lint:fix": "eslint \"src/**/*\" --fix",
-    "test": "node --experimental-vm-modules node_modules/.bin/jest tests/",
-    "test:ci": "node --experimental-vm-modules node_modules/.bin/jest tests/ --ci --reporters=default",
+    "test": "node --experimental-vm-modules node_modules/.bin/jest --testPathPattern=tests --testPathIgnorePatterns=tests/e2e",
+    "test:unit": "node --experimental-vm-modules node_modules/.bin/jest --testPathPattern=tests/unit",
+    "test:integration": "node --experimental-vm-modules node_modules/.bin/jest --testPathPattern=tests/integration",
+    "test:e2e": "node --experimental-vm-modules node_modules/.bin/jest --testPathPattern=tests/e2e",
+    "test:ci": "node --experimental-vm-modules node_modules/.bin/jest --testPathPattern=tests --testPathIgnorePatterns=tests/e2e --ci --reporters=default",
     "test:single": "node --experimental-vm-modules node_modules/.bin/jest",
     "prepublishOnly": "npm run build"
   },
