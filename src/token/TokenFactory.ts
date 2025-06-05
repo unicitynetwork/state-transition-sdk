@@ -70,7 +70,8 @@ export class TokenFactory {
       coinData,
       await RequestId.createFromImprint(tokenId.encode(), MINT_SUFFIX),
       data.transactions[0],
-      this
+      this,
+      createData
     );
 
     const signingService = await SigningService.createFromSecret(MINTER_SECRET, tokenId.encode());

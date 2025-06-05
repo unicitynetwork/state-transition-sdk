@@ -14,7 +14,7 @@ import { AggregatorClient } from '../../src/api/AggregatorClient.js';
 import { CoinId } from '../../src/token/fungible/CoinId.js';
 import { TokenCoinData } from '../../src/token/fungible/TokenCoinData.js';
 import { ITokenJson, Token } from '../../src/token/Token.js';
-import { SplitProof, TokenFactory, Uint8ArrayTokenData } from '../../src/token/TokenFactory.js';
+import { SplitProof, TokenFactory } from '../../src/token/TokenFactory.js';
 import { TokenId } from '../../src/token/TokenId.js';
 import { TokenState } from '../../src/token/TokenState.js';
 import { TokenType } from '../../src/token/TokenType.js';
@@ -29,13 +29,15 @@ import { BigintConverter } from '@unicitylabs/commons/lib/util/BigintConverter.j
 import { IPathJson, ISumPathJson } from '@unicitylabs/prefix-hash-tree/lib/index.js';
 import { SumPath } from '@unicitylabs/prefix-hash-tree/lib/sumtree.js';
 import { TestTokenData } from '../TestTokenData.js';
+import { HexConverter } from '@unicitylabs/commons/lib/util/HexConverter.js';
+import { dedent } from '@unicitylabs/commons/lib/util/StringUtils.js';
 
 const textEncoder = new TextEncoder();
 
 interface IMintData {
   tokenId: TokenId;
   tokenType: TokenType;
-  tokenData: Uint8ArrayTokenData;
+  tokenData: TestTokenData;
   coinData: TokenCoinData;
   data: Uint8Array;
   salt: Uint8Array;
@@ -46,7 +48,7 @@ interface IMintData {
 async function createMintData(secret: Uint8Array, coinData: TokenCoinData): Promise<IMintData> {
   const tokenId = TokenId.create(crypto.getRandomValues(new Uint8Array(32)));
   const tokenType = TokenType.create(crypto.getRandomValues(new Uint8Array(32)));
-  const tokenData = new Uint8ArrayTokenData(crypto.getRandomValues(new Uint8Array(32)));
+  const tokenData = new TestTokenData(crypto.getRandomValues(new Uint8Array(32)));
   
   const data = crypto.getRandomValues(new Uint8Array(32));
 
@@ -73,8 +75,8 @@ async function createMintData(secret: Uint8Array, coinData: TokenCoinData): Prom
   };
 }
 
-async function createMintTokenDataForSplit(tokenId: TokenId, secret: Uint8Array, tokenType: TokenType, coinData: TokenCoinData): Promise<IMintTokenData> {
-  const tokenData = new Uint8ArrayTokenData(crypto.getRandomValues(new Uint8Array(32)));
+async function createMintTokenDataForSplit(tokenId: TokenId, secret: Uint8Array, tokenType: TokenType, coinData: TokenCoinData): Promise<IMintData> {
+  const tokenData = new TestTokenData(crypto.getRandomValues(new Uint8Array(32)));
 
   const data = crypto.getRandomValues(new Uint8Array(32));
 
@@ -207,7 +209,6 @@ describe('Transition', function () {
 
     console.log(JSON.stringify(updateToken.toJSON()));
   }, 15000);
-<<<<<<< HEAD
 
   it('should split tokens', async () => {
     // First, let's mint a token in the usual way.
@@ -226,7 +227,7 @@ describe('Transition', function () {
       [unicityToken, 10n],
       [alphaToken, 20n],
     ]);
-    const mintTokenData = await createMintTokenData(secret, coinData);
+    const mintTokenData = await createMintData(secret, coinData);
     const mintCommitment = await client.submitMintTransaction(
       await DirectAddress.create(mintTokenData.predicate.reference),
       mintTokenData.tokenId,
@@ -282,7 +283,7 @@ describe('Transition', function () {
       transaction,
     );
 
-    const splitTokenData: IMintTokenData[] = await Promise.all(coinsPerNewTokens.map(async (tokenCoinData, index) =>
+    const splitTokenData: IMintData[] = await Promise.all(coinsPerNewTokens.map(async (tokenCoinData, index) =>
       await createMintTokenDataForSplit(newTokenIds[index], secret, mintTokenData.tokenType, tokenCoinData)));
 
     const splitTokens = await Promise.all(
@@ -340,7 +341,7 @@ describe('Transition', function () {
     const newTokenJson = exportFlow(splitTokens[0], null, true);
     const importedToken1 = await new TokenFactory(new PredicateFactory()).create(
       JSON.parse(newTokenJson).token,
-      Uint8ArrayTokenData.fromJSON);
+      TestTokenData.fromJSON);
   }, 150000);
 
   // TODO: Should this function be moved into a different location in the library?
