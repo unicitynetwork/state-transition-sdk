@@ -1,3 +1,4 @@
+import { InclusionProofVerificationStatus } from '@unicitylabs/commons/lib/api/InclusionProof.js';
 import { HashAlgorithm } from '@unicitylabs/commons/lib/hash/HashAlgorithm.js';
 import { SigningService } from '@unicitylabs/commons/lib/signing/SigningService.js';
 
@@ -19,11 +20,14 @@ const receiverSecret = new TextEncoder().encode('tere');
 
 describe('Transition', function () {
   it('should verify the token latest state', async () => {
+    // Mint a new token where owner=initialOwnerSecret
     const aggregatorUrl = process.env.AGGREGATOR_URL ?? 'http://127.0.0.1:80';
     console.log('connecting to aggregator url: ' + aggregatorUrl);
     const client = new StateTransitionClient(new AggregatorClient(aggregatorUrl));
     const data = await createMintData(initialOwnerSecret);
     const token = await mintToken(client, data);
+
+    // Verify that the token was created with the correct recipient address
     await expect(DirectAddress.create(data.predicate.reference)).resolves.toEqual(
       await DirectAddress.fromJSON(token.transactions[0].data.recipient),
     );
@@ -39,7 +43,7 @@ describe('Transition', function () {
       nonce,
     );
 
-    // Create transfer transaction
+    // Create transfer transaction from initial owner to the recipient's masked address
     const transaction = await sendToken(
       client,
       token,
@@ -47,9 +51,8 @@ describe('Transition', function () {
       await DirectAddress.create(recipientPredicate.reference),
     );
 
-    const tokenFactory = new TokenFactory(new PredicateFactory());
-
     // Recipient imports token
+    const tokenFactory = new TokenFactory(new PredicateFactory());
     const importedToken = await tokenFactory.create(token.toJSON(), TestTokenData.fromJSON);
 
     // Recipient gets transaction from sender
@@ -60,20 +63,30 @@ describe('Transition', function () {
       new PredicateFactory(),
     );
 
-    // Finish the transaction with the recipient predicate
-    const updateToken = await client.finishTransaction(
+    // Finalize the transaction using the recipient's predicate and update the token state
+    const updatedToken = await client.finishTransaction(
       importedToken,
       await TokenState.create(recipientPredicate, textEncoder.encode('my custom data')),
       importedTransaction,
     );
 
+    // Verify the updated token
     const signingService = await SigningService.createFromSecret(receiverSecret, token.state.unlockPredicate.nonce);
     expect(importedToken.state.unlockPredicate.isOwner(signingService.publicKey)).toBeTruthy();
-    expect(updateToken.id).toEqual(token.id);
-    expect(updateToken.type).toEqual(token.type);
-    expect(updateToken.data.toJSON()).toEqual(token.data.toJSON());
-    expect(updateToken.coins?.toJSON()).toEqual(token.coins?.toJSON());
+    expect(updatedToken.id).toEqual(token.id);
+    expect(updatedToken.type).toEqual(token.type);
+    expect(updatedToken.data.toJSON()).toEqual(token.data.toJSON());
+    expect(updatedToken.coins?.toJSON()).toEqual(token.coins?.toJSON());
 
-    console.log(JSON.stringify(updateToken.toJSON()));
+    console.log(JSON.stringify(updatedToken.toJSON()));
+
+    // Verify the original minted token has been spent
+    const senderSigningService = await SigningService.createFromSecret(initialOwnerSecret, data.nonce);
+    const mintedTokenStatus = await client.getTokenStatus(token, senderSigningService.publicKey);
+    expect(mintedTokenStatus).toEqual(InclusionProofVerificationStatus.OK);
+
+    // Verify the updated token has not been spent
+    const transferredTokenStatus = await client.getTokenStatus(updatedToken, signingService.publicKey);
+    expect(transferredTokenStatus).toEqual(InclusionProofVerificationStatus.PATH_NOT_INCLUDED);
   }, 15000);
 });
