@@ -30,7 +30,7 @@
   "homepage": "https://unicitynetwork.github.io/state-transition-sdk/",
   "dependencies": {
     "@unicitylabs/commons": "2.4.0-rc.a5f85b0",
-    "@unicitylabs/prefix-hash-tree": "1.2.13-rc.5a9d5d1"
+    "@unicitylabs/prefix-hash-tree": "1.2.13-rc.43a27ce"
   },
   "devDependencies": {
     "@babel/preset-env": "7.27.2",
