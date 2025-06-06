@@ -39,11 +39,11 @@ const mintTransaction = await client.createTransaction(commitment, inclusionProo
 
 // Create token from transaction
 const token = new Token(
-  data.tokenId,
-  data.tokenType,
-  data.tokenData,
-  data.coinData,
-  await TokenState.create(data.predicate, data.data),
+  /* token id */,
+  /* token type */,
+  /* immutable token data */,
+  /* coin data, optional */,
+  await TokenState.create(/* owner predicate */, /* current state data */),
   [mintTransaction],
 );
 ```
