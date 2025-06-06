@@ -61,7 +61,7 @@ export class TokenFactory {
 
     const tokenId = TokenId.create(HexConverter.decode(data.id));
     const tokenType = TokenType.create(HexConverter.decode(data.type));
-    const tokenData: TD = await createData(data.data);
+    const tokenData = await createData(data.data);
     const coinData = data.coins ? TokenCoinData.fromJSON(data.coins) : null;
 
     const mintTransaction = await Transaction.fromMintJSON(

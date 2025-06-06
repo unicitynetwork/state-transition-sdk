@@ -155,7 +155,7 @@ export class StateTransitionClient {
   // TODO: Currently we are supporting only the masked predicates.
   public async submitBurnTransactionForSplit<TD extends ISerializable, MTD extends MintTransactionData<ISerializable | null>>
       (token: Token<TD, MTD>, coinsPerNewTokens: TokenCoinData[], sumTreeHasherFactory: DataHasherFactory<IDataHasher>,
-        sumTreeHashAlgorithm: HashAlgorithm, secret: Uint8Array<ArrayBufferLike>, 
+        sumTreeHashAlgorithm: HashAlgorithm, secret: Uint8Array, 
         previousTransactionNonce: Uint8Array, dataHash: DataHash, message: Uint8Array): Promise<SubmitBurnResult>
   {
     const newTokenIds: TokenId[] = [];
