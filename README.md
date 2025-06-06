@@ -27,23 +27,45 @@ npm install @unicitylabs/state-transition-sdk
 ### Basic Usage
 
 Minting
+
 ```typescript
 // Create aggregator client
 const aggregatorClient = new AggregatorClient('https://gateway-test1.unicity.network:443');
 const client = new StateTransitionClient(aggregatorClient);
 
-const commitment = await client.submitMintTransaction(/* mint parameters */);
+const secret = crypto.getRandomValues(new Uint8Array(128)); // User secret key
+const tokenId = TokenId.create(crypto.getRandomValues(new Uint8Array(32))); // Chosen ID
+const tokenType = TokenType.create(crypto.getRandomValues(new Uint8Array(32))); // Token type
+const tokenData = new TestTokenData(); /* Your own token data object with ISerializable attributes */
+const coinData = new TokenCoinData([/* [CoinId, value] elements to have coins in token */]);
+const salt = crypto.getRandomValues(new Uint8Array(32)); /* Your random salt bytes */
+const stateData = new Uint8Array()/* Your state data bytes */;
+
+const nonce = crypto.getRandomValues(new Uint8Array(32)); /* Your random nonce bytes */
+const signingService = await SigningService.createFromSecret(secret, nonce);
+const predicate = await MaskedPredicate.create(tokenId, tokenType, signingService, HashAlgorithm.SHA256, nonce);
+
+const commitment = await client.submitMintTransaction(
+  await DirectAddress.create(predicate.reference),
+  tokenId,
+  tokenType,
+  tokenData,
+  coinData,
+  salt,
+  await new DataHasher(HashAlgorithm.SHA256).update(stateData).digest(),
+  null,
+);
 // Since submit takes time, inclusion proof might not be immediately available
 const inclusionProof = await client.getInclusionProof(commitment);
 const mintTransaction = await client.createTransaction(commitment, inclusionProof);
 
 // Create token from transaction
 const token = new Token(
-  /* token id */,
-  /* token type */,
-  /* immutable token data */,
-  /* coin data, optional */,
-  await TokenState.create(/* owner predicate */, /* current state data */),
+  tokenId,
+  tokenType,
+  tokenData,
+  coinData,
+  await TokenState.create(predicate, stateData),
   [mintTransaction],
 );
 ```
