@@ -19,7 +19,8 @@ import { CborEncoder } from '@unicitylabs/commons/lib/cbor/CborEncoder.js';
 import { Path, SumPath, IPathJson, ISumPathJson, HashOptions } from '@unicitylabs/prefix-hash-tree';
 import { DataHasherFactory } from '@unicitylabs/commons/lib/hash/DataHasherFactory.js';
 import { HashAlgorithm } from '@unicitylabs/commons/lib/hash/HashAlgorithm.js';
-import { NodeDataHasher } from '@unicitylabs/commons/lib/hash/NodeDataHasher.js';
+import type { IDataHasher } from '@unicitylabs/commons/lib/hash/IDataHasher.js';
+import { createDefaultDataHasherFactory } from '../hash/createDefaultDataHasherFactory.js';
 import { dedent } from '@unicitylabs/commons/lib/util/StringUtils.js';
 import { BigintConverter } from '@unicitylabs/commons/lib/util/BigintConverter.js';
 import { BurnPredicate } from '../predicate/BurnPredicate.js';
@@ -30,8 +31,8 @@ export enum MintReasonType {
 }
 
 const hashOptions: HashOptions = {
-  dataHasherFactory: new DataHasherFactory(NodeDataHasher),
-  algorithm: HashAlgorithm.SHA256
+  dataHasherFactory: createDefaultDataHasherFactory(),
+  algorithm: HashAlgorithm.SHA256,
 };
 
 /**
