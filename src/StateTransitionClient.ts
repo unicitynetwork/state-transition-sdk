@@ -21,7 +21,8 @@ import { MintTransactionData } from './transaction/MintTransactionData.js';
 import { Transaction } from './transaction/Transaction.js';
 import { TransactionData } from './transaction/TransactionData.js';
 import { DataHasherFactory } from '@unicitylabs/commons/lib/hash/DataHasherFactory.js';
-import { NodeDataHasher } from '@unicitylabs/commons/lib/hash/NodeDataHasher.js';
+import type { IDataHasher } from '@unicitylabs/commons/lib/hash/IDataHasher.js';
+import { createDefaultDataHasherFactory } from './hash/createDefaultDataHasherFactory.js';
 import { BigintConverter } from '@unicitylabs/commons/lib/util/BigintConverter.js';
 import { BurnPredicate, BurnReason } from './predicate/BurnPredicate.js';
 import { Leaf, SumLeaf, SMT, SumTree, Path, SumPath, IPathJson, ISumPathJson } from '@unicitylabs/prefix-hash-tree';
@@ -153,7 +154,7 @@ export class StateTransitionClient {
 
   // TODO: Currently we are supporting only the masked predicates.
   public async submitBurnTransactionForSplit<TD extends ISerializable, MTD extends MintTransactionData<ISerializable | null>>
-      (token: Token<TD, MTD>, coinsPerNewTokens: TokenCoinData[], sumTreeHasherFactory: DataHasherFactory<NodeDataHasher>, 
+      (token: Token<TD, MTD>, coinsPerNewTokens: TokenCoinData[], sumTreeHasherFactory: DataHasherFactory<IDataHasher>,
         sumTreeHashAlgorithm: HashAlgorithm, secret: Uint8Array<ArrayBufferLike>, 
         previousTransactionNonce: Uint8Array, dataHash: DataHash, message: Uint8Array): Promise<SubmitBurnResult>
   {
