@@ -4,7 +4,6 @@ import { ISerializable } from '../ISerializable.js';
 import { MintTransactionData } from '../transaction/MintTransactionData.js';
 import { Transaction } from '../transaction/Transaction.js';
 import { TransactionData } from '../transaction/TransactionData.js';
-import { PredicateType } from './PredicateType.js';
 
 /**
  * JSON representation of a predicate.
@@ -17,7 +16,6 @@ export interface IPredicateJson {
  * Interface for a predicate that controls token ownership.
  */
 export interface IPredicate {
-  readonly type: PredicateType;
   /** Reference hash used in addresses. */
   readonly reference: DataHash;
   /** Unique hash identifying the predicate. */

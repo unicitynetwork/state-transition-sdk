@@ -40,4 +40,3 @@ export * from './transaction/TransactionData.js';
 // Core exports
 export * from './ISerializable.js';
 export * from './StateTransitionClient.js';
-export * from './hash/createDefaultDataHasherFactory.js';

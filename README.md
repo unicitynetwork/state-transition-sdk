@@ -64,18 +64,6 @@ const transaction = await client.createTransaction(commitment, inclusionProof);
 await client.finishTransaction(/* transaction parameters */);
 ```
 
-### Browser Usage
-
-When used in a browser environment, hashing automatically falls back to the Web
-Crypto API. Use `createDefaultDataHasherFactory()` when constructing prefix hash
-trees:
-
-```typescript
-import { createDefaultDataHasherFactory } from '@unicitylabs/state-transition-sdk';
-
-const hasherFactory = createDefaultDataHasherFactory();
-```
-
 ## Core Components
 
 ### StateTransitionClient
