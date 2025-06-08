@@ -15,7 +15,6 @@ import { TokenCoinData } from '../token/fungible/TokenCoinData.js';
 import { TokenId } from '../token/TokenId.js';
 import { TokenState } from '../token/TokenState.js';
 import { TokenType } from '../token/TokenType.js';
-import { MintReasonType, SplitProof, ISplitProofJson, TokenFactory } from '../token/TokenFactory.js';
 
 /** JSON representation of a {@link Transaction}. */
 export interface ITransactionJson<T extends ITransactionDataJson | IMintTransactionDataJson> {
@@ -66,18 +65,16 @@ export class Transaction<T extends TransactionData | MintTransactionData<ISerial
     );
   }
 
-  public static async fromMintJSON<TD extends ISerializable>(
+  public static async fromMintJSON(
     tokenId: TokenId,
     tokenType: TokenType,
     tokenData: ISerializable,
     coinData: TokenCoinData | null,
     sourceState: RequestId,
     transaction: ITransactionJson<IMintTransactionDataJson>,
-    tokenFactory: TokenFactory,
-    createData: (data: unknown) => Promise<TD>
   ): Promise<Transaction<MintTransactionData<ISerializable | null>>> {
     // TODO: Parse reason properly
-    const reason = transaction.data.reason ? await Transaction.createMintReason(transaction.data.reason, tokenFactory, createData) : null;
+    const reason = transaction.data.reason ? null : null;
 
     return new Transaction(
       await MintTransactionData.create(
@@ -93,19 +90,6 @@ export class Transaction<T extends TransactionData | MintTransactionData<ISerial
       ),
       InclusionProof.fromJSON(transaction.inclusionProof),
     );
-  }
-
-  private static async createMintReason<TD extends ISerializable>(data: unknown, tokenFactory: TokenFactory, createData: (data: unknown) => Promise<TD>): Promise<ISerializable> {
-    if (typeof data !== 'object' || data == null || !('type' in data)) {
-      throw new Error('MintReason: data is not an object');
-    }
-
-    switch (data.type as MintReasonType) {
-      case MintReasonType.TOKEN_SPLIT:
-        return await SplitProof.fromJSON(data as ISplitProofJson, tokenFactory, createData);
-      default:
-        throw new Error('NOT IMPLEMENTED');
-    }
   }
 
   /** Serialize transaction and proof to JSON. */
