@@ -1,0 +1,51 @@
+# Starts Aggregator with the required mongodb cluster.
+# Make sure to point to the correct aggregator dockerfile using
+# AGGREGATOR_HOME env variable i.e. `AGGREGATOR_HOME=<path to aggregator root dir> docker-compose up`
+# defaults to `../../../../../aggregators_net` i.e. aggregators_net and state-transition-sdk are sibling directories
+#
+# Exposes container port 3000 on a random host port;
+# use `container.getMappedPort(3000)` in testcontainer to retrieve the host port.
+
+services:
+  mongo1:
+    image: mongo:7.0
+    command: [ "--replSet", "rs0", "--bind_ip_all" ]
+    volumes:
+      - ./mongo-data/mongo1:/data/db
+
+  mongo2:
+    image: mongo:7.0
+    command: [ "--replSet", "rs0", "--bind_ip_all" ]
+    volumes:
+      - ./mongo-data/mongo2:/data/db
+
+  mongo3:
+    image: mongo:7.0
+    command: [ "--replSet", "rs0", "--bind_ip_all" ]
+    volumes:
+      - ./mongo-data/mongo3:/data/db
+
+  mongo-setup:
+    image: mongo:7.0
+    depends_on:
+      - mongo1
+      - mongo2
+      - mongo3
+    volumes:
+      - ./mongo-init.js:/mongo-init.js
+    entrypoint: [ "mongosh", "--host", "mongo1:27017", "--file", "/mongo-init.js" ] # mongo default port 27017
+
+  aggregator-test:
+    build:
+      context: ${AGGREGATOR_HOME:-../../../../../aggregators_net} # path to aggregator dockerfile directory
+      dockerfile: Dockerfile
+    container_name: aggregator-test # must be specified for Testcontainers docker compose API
+    depends_on:
+      - mongo-setup
+    ports:
+      - "3000" # port inside the container; host port is chosen randomly
+    environment:
+      - MONGODB_URI=mongodb://mongo1:27017 # docker resolves "mongo1" internally
+      - USE_MOCK_ALPHABILL=true
+      - DISABLE_HIGH_AVAILABILITY=true
+      - PORT=3000

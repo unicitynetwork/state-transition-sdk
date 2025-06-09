@@ -139,3 +139,6 @@ txf
 .idea
 
 /lib
+
+# docker output for integration tests
+tests/integration/docker/aggregator/mongo-data

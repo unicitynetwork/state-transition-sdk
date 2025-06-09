@@ -158,13 +158,26 @@ npm run build
 
 ### Testing
 
-Run all tests except e2e tests.
+Run unit and integrations tests.
+NB! Integration tests require docker to be installed.
 
 ```bash
 npm test
 ```
 
-Run e2e tests.
+Run unit tests only.
+
+```bash
+npm run test:unit
+```
+
+Run integration tests only.
+
+```bash
+npm run test:integration
+```
+
+Run end-to-end tests only.
 
 ```bash
 AGGREGATOR_URL='https://aggregator.devnet.alphabill.org' npm run test:e2e
