@@ -1,6 +1,5 @@
-import { InclusionProof, InclusionProofVerificationStatus } from '@unicitylabs/commons/lib/api/InclusionProof.js';
+import { InclusionProofVerificationStatus } from '@unicitylabs/commons/lib/api/InclusionProof.js';
 import { RequestId } from '@unicitylabs/commons/lib/api/RequestId.js';
-import { DataHash } from '@unicitylabs/commons/lib/hash/DataHash.js';
 import { SigningService } from '@unicitylabs/commons/lib/signing/SigningService.js';
 import { HexConverter } from '@unicitylabs/commons/lib/util/HexConverter.js';
 
@@ -12,10 +11,29 @@ import { TokenId } from './TokenId.js';
 import { TokenState } from './TokenState.js';
 import { TokenType } from './TokenType.js';
 import { IPredicateFactory } from '../predicate/IPredicateFactory.js';
-import { IMintTransactionDataJson, MintTransactionData } from '../transaction/MintTransactionData.js';
+import { MintTransactionData } from '../transaction/MintTransactionData.js';
 import { ITransactionJson, Transaction } from '../transaction/Transaction.js';
 import { ITransactionDataJson, TransactionData } from '../transaction/TransactionData.js';
 import { TokenCoinData } from './fungible/TokenCoinData.js';
+import { CborEncoder } from '@unicitylabs/commons/lib/cbor/CborEncoder.js';
+import { Path, SumPath, IPathJson, ISumPathJson, HashOptions } from '@unicitylabs/prefix-hash-tree';
+import { DataHasherFactory } from '@unicitylabs/commons/lib/hash/DataHasherFactory.js';
+import { HashAlgorithm } from '@unicitylabs/commons/lib/hash/HashAlgorithm.js';
+import type { IDataHasher } from '@unicitylabs/commons/lib/hash/IDataHasher.js';
+import { createDefaultDataHasherFactory } from '../hash/createDefaultDataHasherFactory.js';
+import { dedent } from '@unicitylabs/commons/lib/util/StringUtils.js';
+import { BigintConverter } from '@unicitylabs/commons/lib/util/BigintConverter.js';
+import { BurnPredicate } from '../predicate/BurnPredicate.js';
+import { PredicateType } from '../predicate/PredicateType.js';
+
+export enum MintReasonType {
+  TOKEN_SPLIT = 'TOKEN_SPLIT'
+}
+
+const hashOptions: HashOptions = {
+  dataHasherFactory: createDefaultDataHasherFactory(),
+  algorithm: HashAlgorithm.SHA256,
+};
 
 /**
  * Utility for constructing tokens from their serialized form.
@@ -38,7 +56,7 @@ export class TokenFactory {
   ): Promise<Token<TD, MintTransactionData<ISerializable | null>>> {
     const tokenVersion = data.version;
     if (tokenVersion !== TOKEN_VERSION) {
-      throw new Error('Cannot parse token. Version mismatch.');
+      throw new Error(`Cannot parse token. Version mismatch: ${tokenVersion} !== ${TOKEN_VERSION}`);
     }
 
     const tokenId = TokenId.create(HexConverter.decode(data.id));
@@ -46,18 +64,20 @@ export class TokenFactory {
     const tokenData = await createData(data.data);
     const coinData = data.coins ? TokenCoinData.fromJSON(data.coins) : null;
 
-    const mintTransaction = await this.createMintTransaction(
+    const mintTransaction = await Transaction.fromMintJSON(
       tokenId,
       tokenType,
       tokenData,
       coinData,
       await RequestId.createFromImprint(tokenId.encode(), MINT_SUFFIX),
       data.transactions[0],
+      this,
+      createData
     );
 
     const signingService = await SigningService.createFromSecret(MINTER_SECRET, tokenId.encode());
 
-    if (!(await this.verifyMintTransaction(mintTransaction, signingService.publicKey))) {
+    if (!(await this.verifyMintTransaction(mintTransaction, signingService.publicKey, coinData, tokenId.toJSON()))) {
       throw new Error('Mint transaction verification failed.');
     }
 
@@ -66,10 +86,11 @@ export class TokenFactory {
     ];
     let previousTransaction: Transaction<MintTransactionData<ISerializable | null> | TransactionData> = mintTransaction;
     for (let i = 1; i < data.transactions.length; i++) {
-      const transaction = await this.createTransaction(
+      const transaction = await Transaction.fromJSON(
         tokenId,
         tokenType,
         data.transactions[i] as ITransactionJson<ITransactionDataJson>,
+        this.predicateFactory,
       );
 
       // TODO: Move address processing to a separate method
@@ -109,89 +130,16 @@ export class TokenFactory {
   }
 
   /**
-   * Create a mint transaction from JSON.
-   * @param tokenId Token identifier
-   * @param tokenType Type of the token
-   * @param tokenData Immutable token data object
-   * @param coinData Fungible coin data, or null if none
-   * @param sourceState Mint source state
-   * @param transaction JSON representation of the mint transaction
-   */
-  private async createMintTransaction(
-    tokenId: TokenId,
-    tokenType: TokenType,
-    tokenData: ISerializable,
-    coinData: TokenCoinData | null,
-    sourceState: RequestId,
-    transaction: ITransactionJson<IMintTransactionDataJson>,
-  ): Promise<Transaction<MintTransactionData<ISerializable | null>>> {
-    return new Transaction(
-      await MintTransactionData.create(
-        tokenId,
-        tokenType,
-        tokenData,
-        coinData,
-        sourceState,
-        transaction.data.recipient,
-        HexConverter.decode(transaction.data.salt),
-        transaction.data.dataHash ? DataHash.fromJSON(transaction.data.dataHash) : null,
-        // TODO: Parse reason properly
-        transaction.data.reason ? this.createMintReason(transaction.data.reason) : null,
-      ),
-      InclusionProof.fromJSON(transaction.inclusionProof),
-    );
-  }
-
-  /** Parse the reason field of a mint transaction (not yet implemented). */
-  private createMintReason(data: unknown): ISerializable {
-    if (typeof data !== 'object' || data == null || !('type' in data)) {
-      throw new Error('MintReason: data is not an object');
-    }
-
-    switch (data.type) {
-      default:
-        throw new Error('NOT IMPLEMENTED');
-    }
-  }
-
-  /**
-   * Create a transaction from JSON data.
-   * @param tokenId Token identifier
-   * @param tokenType Token type
-   * @param data Transaction data to deserialize
-   * @param inclusionProof Transaction inclusion proof
-   * @private
-   */
-  private async createTransaction(
-    tokenId: TokenId,
-    tokenType: TokenType,
-    { data, inclusionProof }: ITransactionJson<ITransactionDataJson>,
-  ): Promise<Transaction<TransactionData>> {
-    return new Transaction(
-      await TransactionData.create(
-        await TokenState.create(
-          await this.predicateFactory.create(tokenId, tokenType, data.sourceState.unlockPredicate),
-          data.sourceState.data ? HexConverter.decode(data.sourceState.data) : null,
-        ),
-        data.recipient,
-        HexConverter.decode(data.salt),
-        data.dataHash ? DataHash.fromJSON(data.dataHash) : null,
-        data.message ? HexConverter.decode(data.message) : null,
-        [], //await Promise.all(data.nameTags.map((input) => this.importToken(input, NameTagTokenData, predicateFactory))),
-      ),
-      InclusionProof.fromJSON(inclusionProof),
-    );
-  }
-
-  /**
    * Verify a mint transaction integrity and validate against public key.
    * @param transaction Mint transaction
    * @param publicKey Public key of the minter
    * @private
    */
-  private async verifyMintTransaction(
+  private async verifyMintTransaction<TD extends ISerializable>(
     transaction: Transaction<MintTransactionData<ISerializable | null>>,
     publicKey: Uint8Array,
+    coinData: TokenCoinData | null,
+    tokenId: string
   ): Promise<boolean> {
     if (!transaction.inclusionProof.authenticator || !transaction.inclusionProof.transactionHash) {
       return false;
@@ -209,9 +157,147 @@ export class TokenFactory {
       return false;
     }
 
+    if (transaction.data.reason instanceof SplitProof) {
+      if (coinData == null) {
+        return false;
+      }
+      if (transaction.data.reason.burnedToken.state.unlockPredicate.type != PredicateType.BURN) {
+        return false; 
+      }
+      const coinIds: string[] = new Array();
+      const splitProof: SplitProof<TD, MintTransactionData<ISerializable>> = transaction.data.reason;
+      for (let [coinId, [path, sumPath]] of splitProof.burnProofsByCoinId) {
+        coinIds.push(coinId);
+
+        if (!await path.provesInclusionAt(BigintConverter.decode(HexConverter.decode(coinId)))) {
+          return false;
+        }
+        if (!await sumPath.provesInclusionAt(BigintConverter.decode(HexConverter.decode(tokenId)))) {
+          return false;
+        }
+        if (path.getLeafValue() !== HexConverter.encode(sumPath.getRootHash()!)) {
+          return false;
+        }
+        if (coinData.coins.find(([id, _]) => id.toJSON() === coinId)?.[1] !== sumPath.getLeafNumericValue()) {
+          return false;
+        }
+
+        if (HexConverter.encode(path.getRootHash()!) !==
+            HexConverter.encode((transaction.data.reason.burnedToken.state.unlockPredicate as BurnPredicate).burnReason.newTokensTreeHash.data)) {
+          return false;
+        }
+      }
+
+      const mintedCoinIdsAsStrings = coinData.coins.map(([id, _]) => id.toJSON());
+      if (!arraysEqual(coinIds, mintedCoinIdsAsStrings)) {
+        return false;
+      }
+    }
+
     // Verify inclusion proof path.
     const requestId = await RequestId.create(publicKey, transaction.data.sourceState.hash);
     const status = await transaction.inclusionProof.verify(requestId.toBigInt());
     return status === InclusionProofVerificationStatus.OK;
+  }
+}
+
+// TODO: Is there a more canonical way?
+function arraysEqual(arr1: string[], arr2: string[]): boolean {
+  if (arr1.length !== arr2.length) {
+    return false;
+  }
+  // Use every() to check if all elements are equal at each index
+  return arr1.every((value, index) => value === arr2[index]);
+}
+
+export interface ISplitProofJson {
+  type: MintReasonType.TOKEN_SPLIT;
+  burnedToken: ITokenJson;
+  burnProofsByCoinId: Array<[string, [IPathJson, ISumPathJson]]>;
+}
+
+export class SplitProof<TD extends ISerializable, MTD extends MintTransactionData<ISerializable | null>> implements ISerializable {
+  constructor(public readonly burnedToken: Token<TD, MTD>, public readonly burnProofsByCoinId: Map<string, [Path, SumPath]>) {
+  }
+
+  public toCBOR(): Uint8Array {
+    const encodedBurnProofEntries: Uint8Array[] = [];
+
+    for (const [coinId, proofs] of this.burnProofsByCoinId.entries()) {
+      const encodedEntry: Uint8Array = CborEncoder.encodeArray([
+        CborEncoder.encodeTextString(coinId),
+        CborEncoder.encodeArray([
+          proofs[0].toCBOR(),
+          proofs[1].toCBOR()
+        ])
+      ]);
+      encodedBurnProofEntries.push(encodedEntry);
+    }
+
+    return CborEncoder.encodeArray([
+      this.burnedToken.toCBOR(),
+      CborEncoder.encodeArray(encodedBurnProofEntries)
+    ]);
+  }
+
+  public toJSON(): ISplitProofJson {
+    const burnProofsArray: Array<[string, [IPathJson, ISumPathJson]]> = [];
+    for (const [coinId, proofs] of this.burnProofsByCoinId.entries()) {
+      burnProofsArray.push([
+        coinId,
+        [
+          proofs[0].toJSON(),
+          proofs[1].toJSON()
+        ]
+      ]);
+    }
+
+    return {
+      type: MintReasonType.TOKEN_SPLIT,
+      burnedToken: this.burnedToken.toJSON(),
+      burnProofsByCoinId: burnProofsArray,
+    };
+  }
+
+  public static async fromJSON<TD extends ISerializable>(
+    json: ISplitProofJson,
+    tokenFactory: TokenFactory, 
+    createData: (data: unknown) => Promise<TD>): Promise<SplitProof<TD, MintTransactionData<ISerializable | null>>>
+  {
+    if (typeof json !== 'object' || json === null) {
+      throw new Error('Invalid JSON data for SplitProof: input is not an object.');
+    }
+    if (typeof json.burnedToken === 'undefined') {
+      throw new Error('Invalid JSON data for SplitProof: missing burnedToken.');
+    }
+    if (!Array.isArray(json.burnProofsByCoinId)) { // Check if it's an array
+      throw new Error('Invalid JSON data for SplitProof: burnProofsByCoinId is not an array.');
+    }
+
+    const deserializedToken = await tokenFactory.create(
+      json.burnedToken,
+      createData);
+
+    const deserializedBurnProofs = new Map<string, [Path, SumPath]>();
+    for (const entry of json.burnProofsByCoinId) {
+      if (!Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== 'string') {
+        throw new Error('Invalid JSON data for SplitProof: malformed entry in burnProofsByCoinId array.');
+      }
+      const coinId = entry[0];
+      const proofPairJson = entry[1];
+
+      if (!Array.isArray(proofPairJson) || proofPairJson.length !== 2) {
+        throw new Error(`Invalid JSON data for SplitProof: proof pair for coinId ${coinId} is not a 2-element array.`);
+      }
+      const path = Path.fromJSON(proofPairJson[0], hashOptions);
+      const sumPath = SumPath.fromJSON(proofPairJson[1], hashOptions);
+      deserializedBurnProofs.set(coinId, [path, sumPath]); // Order of insertion into Map is preserved
+    }
+
+    return new SplitProof<TD, MintTransactionData<ISerializable | null>>(deserializedToken, deserializedBurnProofs);
+  }
+
+  public toString(): string {
+    return this.burnedToken.toString();
   }
 }

@@ -28,6 +28,10 @@
   "author": "cryptohog",
   "license": "ISC",
   "homepage": "https://unicitynetwork.github.io/state-transition-sdk/",
+  "dependencies": {
+    "@unicitylabs/commons": "2.4.0-rc.a5f85b0",
+    "@unicitylabs/prefix-hash-tree": "1.2.13-rc.43a27ce"
+  },
   "devDependencies": {
     "@babel/preset-env": "7.27.2",
     "@babel/preset-typescript": "7.27.1",
@@ -43,7 +47,7 @@
     "typescript": "5.8.3",
     "typescript-eslint": "8.33.0"
   },
-  "dependencies": {
-    "@unicitylabs/commons": "2.4.0-rc.1d26eee"
+  "overrides": {
+    "@unicitylabs/commons": "2.4.0-rc.a5f85b0"
   }
 }
