@@ -1,7 +1,4 @@
 # Starts Aggregator with the required mongodb cluster.
-# Make sure to point to the correct aggregator dockerfile using
-# AGGREGATOR_HOME env variable i.e. `AGGREGATOR_HOME=<path to aggregator root dir> docker-compose up`
-# defaults to `../../../../../aggregators_net` i.e. aggregators_net and state-transition-sdk are sibling directories
 #
 # Exposes container port 3000 on a random host port;
 # use `container.getMappedPort(3000)` in testcontainer to retrieve the host port.
@@ -36,16 +33,18 @@ services:
     entrypoint: [ "mongosh", "--host", "mongo1:27017", "--file", "/mongo-init.js" ] # mongo default port 27017
 
   aggregator-test:
-    build:
-      context: ${AGGREGATOR_HOME:-../../../../../aggregators_net} # path to aggregator dockerfile directory
-      dockerfile: Dockerfile
+#    build:
+#      context: ${AGGREGATOR_HOME:-../../../../../aggregators_net} # path to aggregator dockerfile directory
+#      dockerfile: Dockerfile
+    image: ghcr.io/unicitynetwork/aggregators_net:7e7ced5faf4c2391651c9afaaf2344223631839c
     container_name: aggregator-test # must be specified for Testcontainers docker compose API
     depends_on:
       - mongo-setup
     ports:
-      - "3000" # port inside the container; host port is chosen randomly
+      - '3000' # port inside the container; host port is chosen randomly
     environment:
-      - MONGODB_URI=mongodb://mongo1:27017 # docker resolves "mongo1" internally
+      - MONGODB_URI=mongodb://mongo1:27017
       - USE_MOCK_ALPHABILL=true
+      - ALPHABILL_PRIVATE_KEY=FF00000000000000000000000000000000000000000000000000000000000000 # must be specified for some reason, even though we use the mock
       - DISABLE_HIGH_AVAILABILITY=true
       - PORT=3000
