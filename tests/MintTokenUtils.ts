@@ -8,7 +8,6 @@ import { DirectAddress } from '../src/address/DirectAddress.js';
 import { ISerializable } from '../src/ISerializable.js';
 import { MaskedPredicate } from '../src/predicate/MaskedPredicate.js';
 import { StateTransitionClient } from '../src/StateTransitionClient.js';
-import { CoinId } from '../src/token/fungible/CoinId.js';
 import { TokenCoinData } from '../src/token/fungible/TokenCoinData.js';
 import { Token } from '../src/token/Token.js';
 import { TokenId } from '../src/token/TokenId.js';
@@ -29,14 +28,44 @@ export interface IMintData {
   predicate: MaskedPredicate;
 }
 
-export async function createMintData(secret: Uint8Array): Promise<IMintData> {
+export async function createMintData(secret: Uint8Array, coinData: TokenCoinData): Promise<IMintData> {
   const tokenId = TokenId.create(crypto.getRandomValues(new Uint8Array(32)));
   const tokenType = TokenType.create(crypto.getRandomValues(new Uint8Array(32)));
   const tokenData = new TestTokenData(crypto.getRandomValues(new Uint8Array(32)));
-  const coinData = new TokenCoinData([
-    [new CoinId(crypto.getRandomValues(new Uint8Array(32))), BigInt(Math.round(Math.random() * 90)) + 10n],
-    [new CoinId(crypto.getRandomValues(new Uint8Array(32))), BigInt(Math.round(Math.random() * 90)) + 10n],
-  ]);
+
+  const data = crypto.getRandomValues(new Uint8Array(32));
+
+  const salt = crypto.getRandomValues(new Uint8Array(32));
+  const nonce = crypto.getRandomValues(new Uint8Array(32));
+
+  const predicate = await MaskedPredicate.create(
+    tokenId,
+    tokenType,
+    await SigningService.createFromSecret(secret, nonce),
+    HashAlgorithm.SHA256,
+    nonce,
+  );
+
+  return {
+    coinData,
+    data,
+    nonce,
+    predicate,
+    salt,
+    tokenData,
+    tokenId,
+    tokenType,
+  };
+}
+
+export async function createMintTokenDataForSplit(
+  tokenId: TokenId,
+  secret: Uint8Array,
+  tokenType: TokenType,
+  coinData: TokenCoinData,
+): Promise<IMintData> {
+  const tokenData = new TestTokenData(crypto.getRandomValues(new Uint8Array(32)));
+
   const data = crypto.getRandomValues(new Uint8Array(32));
 
   const salt = crypto.getRandomValues(new Uint8Array(32));
