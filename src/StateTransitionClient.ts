@@ -5,10 +5,10 @@ import { DataHash } from '@unicitylabs/commons/lib/hash/DataHash.js';
 import { HashAlgorithm } from '@unicitylabs/commons/lib/hash/HashAlgorithm.js';
 import { SigningService } from '@unicitylabs/commons/lib/signing/SigningService.js';
 import { HexConverter } from '@unicitylabs/commons/lib/util/HexConverter.js';
+import { SubmitCommitmentStatus } from '@unicitylabs/commons/lib/api/SubmitCommitmentResponse.js';
 
 import { DirectAddress } from './address/DirectAddress.js';
 import { IAggregatorClient } from './api/IAggregatorClient.js';
-import { SubmitCommitmentStatus } from './api/SubmitCommitmentResponse.js';
 import { ISerializable } from './ISerializable.js';
 import { TokenCoinData } from './token/fungible/TokenCoinData.js';
 import { NameTagToken } from './token/NameTagToken.js';
@@ -20,6 +20,12 @@ import { Commitment } from './transaction/Commitment.js';
 import { MintTransactionData } from './transaction/MintTransactionData.js';
 import { Transaction } from './transaction/Transaction.js';
 import { TransactionData } from './transaction/TransactionData.js';
+import { DataHasherFactory } from '@unicitylabs/commons/lib/hash/DataHasherFactory.js';
+import type { IDataHasher } from '@unicitylabs/commons/lib/hash/IDataHasher.js';
+import { createDefaultDataHasherFactory } from './hash/createDefaultDataHasherFactory.js';
+import { BigintConverter } from '@unicitylabs/commons/lib/util/BigintConverter.js';
+import { BurnPredicate, BurnReason } from './predicate/BurnPredicate.js';
+import { Leaf, SumLeaf, SMT, SumTree, Path, SumPath, IPathJson, ISumPathJson } from '@unicitylabs/prefix-hash-tree';
 
 // TOKENID string SHA-256 hash
 /**
@@ -145,6 +151,75 @@ export class StateTransitionClient {
     return new Commitment(requestId, transactionData, authenticator);
   }
 
+
+  // TODO: Currently we are supporting only the masked predicates.
+  public async submitBurnTransactionForSplit<TD extends ISerializable, MTD extends MintTransactionData<ISerializable | null>>
+      (token: Token<TD, MTD>, coinsPerNewTokens: TokenCoinData[], sumTreeHasherFactory: DataHasherFactory<IDataHasher>,
+        sumTreeHashAlgorithm: HashAlgorithm, secret: Uint8Array, 
+        previousTransactionNonce: Uint8Array, dataHash: DataHash, message: Uint8Array): Promise<SubmitBurnResult>
+  {
+    const newTokenIds: TokenId[] = [];
+    const coinIdToTokenIdToAmount: Map<string, Map<string, bigint>> = new Map();
+    for (let tokenCoinData of coinsPerNewTokens) {
+      const newTokenId = TokenId.create(crypto.getRandomValues(new Uint8Array(32)));
+      newTokenIds.push(newTokenId);
+      for (let [coinId, amount] of tokenCoinData.coins) {
+        if (!coinIdToTokenIdToAmount.has(coinId.toJSON())) {
+          coinIdToTokenIdToAmount.set(coinId.toJSON(), new Map());
+        }
+        if (coinIdToTokenIdToAmount.get(coinId.toJSON())!.has(newTokenId.toJSON())) {
+          throw Error('Duplicate coinId in a new token');
+        }
+        coinIdToTokenIdToAmount.get(coinId.toJSON())!.set(newTokenId.toJSON(), amount);
+      }
+    }
+
+    const coinTrees: Map<string, SumTree> = new Map();
+    for (let [coinIdString, tokenIdToAmount] of coinIdToTokenIdToAmount) {
+      const coinsTreeLeaves: [bigint, SumLeaf][] = [];
+      for (let [tokenIdString, amount] of tokenIdToAmount) {
+        coinsTreeLeaves.push([
+          BigintConverter.decode(HexConverter.decode(tokenIdString)),
+          { value: BigintConverter.encode(0n), numericValue: amount }
+        ]);
+      }
+      coinTrees.set(coinIdString, new SumTree(sumTreeHasherFactory, sumTreeHashAlgorithm, new Map(coinsTreeLeaves)));
+    }
+
+    // Create a new tree of all othe other trees.
+    const leavesByCoinId: [bigint, Leaf][] = [];
+    for (let [coinIdString, sumTree] of coinTrees) {
+      leavesByCoinId.push([
+        BigintConverter.decode(HexConverter.decode(coinIdString)),
+        { value: HexConverter.encode(await sumTree.getRootHash()) }
+      ]);
+    }
+    const allCoinsTree = new SMT(sumTreeHasherFactory, sumTreeHashAlgorithm, new Map(leavesByCoinId));
+
+    const recipientPredicate = await BurnPredicate.create(
+      token.id,
+      token.type,
+      crypto.getRandomValues(new Uint8Array(32)),
+      new BurnReason(new DataHash(sumTreeHashAlgorithm, await allCoinsTree.getRootHash()))
+    );
+    const recipient = await DirectAddress.create(recipientPredicate.reference);
+
+    const transactionData = await TransactionData.create(
+      token.state,
+      recipient.toJSON(),
+      crypto.getRandomValues(new Uint8Array(32)),
+      dataHash,
+      message,
+      token.nametagTokens
+    );
+
+    const commitment = await this.submitTransaction(
+      transactionData,
+      await SigningService.createFromSecret(secret, previousTransactionNonce)
+    );
+    return { commitment, recipientPredicate, newTokenIds, allCoinsTree, coinTrees };
+  }
+
   /**
    * Build a {@link Transaction} object once an inclusion proof is obtained.
    *
@@ -254,4 +329,12 @@ export class StateTransitionClient {
   ): Promise<InclusionProof> {
     return this.client.getInclusionProof(commitment.requestId);
   }
+}
+
+export type SubmitBurnResult = { 
+  commitment: Commitment<TransactionData>; 
+  recipientPredicate: BurnPredicate; 
+  newTokenIds: TokenId[]; 
+  allCoinsTree: SMT; 
+  coinTrees: Map<string, SumTree>; 
 }

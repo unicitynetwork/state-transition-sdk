@@ -6,7 +6,6 @@ export * from './address/IAddress.js';
 // API exports
 export * from './api/AggregatorClient.js';
 export * from './api/IAggregatorClient.js';
-export * from './api/SubmitCommitmentResponse.js';
 
 // Predicate exports
 export * from './predicate/BurnPredicate.js';
@@ -40,3 +39,4 @@ export * from './transaction/TransactionData.js';
 // Core exports
 export * from './ISerializable.js';
 export * from './StateTransitionClient.js';
+export * from './hash/createDefaultDataHasherFactory.js';

@@ -5,8 +5,8 @@ import { RequestId } from '@unicitylabs/commons/lib/api/RequestId.js';
 import { DataHash } from '@unicitylabs/commons/lib/hash/DataHash.js';
 import { SparseMerkleTree } from '@unicitylabs/commons/lib/smt/SparseMerkleTree.js';
 
-import { IAggregatorClient } from '../../src/api/IAggregatorClient.js';
-import { SubmitCommitmentResponse, SubmitCommitmentStatus } from '../../src/api/SubmitCommitmentResponse.js';
+import { IAggregatorClient } from '../src/api/IAggregatorClient.js';
+import { SubmitCommitmentResponse, SubmitCommitmentStatus } from '@unicitylabs/commons/lib/api/SubmitCommitmentResponse.js';
 
 class Transaction {
   public constructor(
