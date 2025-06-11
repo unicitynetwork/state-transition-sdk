@@ -36,7 +36,7 @@ services:
 #    build:
 #      context: ${AGGREGATOR_HOME:-../../../../../aggregators_net} # path to aggregator dockerfile directory
 #      dockerfile: Dockerfile
-    image: ghcr.io/unicitynetwork/aggregators_net:7e7ced5faf4c2391651c9afaaf2344223631839c
+    image: ghcr.io/unicitynetwork/aggregators_net:bbabb5f093e829fa789ed6e83f57af98df3f1752
     container_name: aggregator-test # must be specified for Testcontainers docker compose API
     depends_on:
       - mongo-setup
