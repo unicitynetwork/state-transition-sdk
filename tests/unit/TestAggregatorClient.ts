@@ -2,11 +2,14 @@ import { Authenticator } from '@unicitylabs/commons/lib/api/Authenticator.js';
 import { InclusionProof } from '@unicitylabs/commons/lib/api/InclusionProof.js';
 import { LeafValue } from '@unicitylabs/commons/lib/api/LeafValue.js';
 import { RequestId } from '@unicitylabs/commons/lib/api/RequestId.js';
+import {
+  SubmitCommitmentResponse,
+  SubmitCommitmentStatus,
+} from '@unicitylabs/commons/lib/api/SubmitCommitmentResponse.js';
 import { DataHash } from '@unicitylabs/commons/lib/hash/DataHash.js';
 import { SparseMerkleTree } from '@unicitylabs/commons/lib/smt/SparseMerkleTree.js';
 
-import { IAggregatorClient } from '../src/api/IAggregatorClient.js';
-import { SubmitCommitmentResponse, SubmitCommitmentStatus } from '@unicitylabs/commons/lib/api/SubmitCommitmentResponse.js';
+import { IAggregatorClient } from '../../src/api/IAggregatorClient.js';
 
 class Transaction {
   public constructor(
