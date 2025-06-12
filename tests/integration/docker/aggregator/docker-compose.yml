@@ -9,25 +9,43 @@ services:
     command: [ "--replSet", "rs0", "--bind_ip_all" ]
     volumes:
       - ./mongo-data/mongo1:/data/db
+    healthcheck:
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
+      interval: 1s
+      timeout: 1s
+      retries: 30
 
   mongo2:
     image: mongo:7.0
     command: [ "--replSet", "rs0", "--bind_ip_all" ]
     volumes:
       - ./mongo-data/mongo2:/data/db
+    healthcheck:
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
+      interval: 1s
+      timeout: 1s
+      retries: 30
 
   mongo3:
     image: mongo:7.0
     command: [ "--replSet", "rs0", "--bind_ip_all" ]
     volumes:
       - ./mongo-data/mongo3:/data/db
+    healthcheck:
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
+      interval: 1s
+      timeout: 1s
+      retries: 30
 
   mongo-setup:
     image: mongo:7.0
     depends_on:
-      - mongo1
-      - mongo2
-      - mongo3
+      mongo1:
+        condition: service_healthy
+      mongo2:
+        condition: service_healthy
+      mongo3:
+        condition: service_healthy
     volumes:
       - ./mongo-init.js:/mongo-init.js
     entrypoint: [ "mongosh", "--host", "mongo1:27017", "--file", "/mongo-init.js" ] # mongo default port 27017

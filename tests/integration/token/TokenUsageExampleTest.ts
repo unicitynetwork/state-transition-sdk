@@ -21,10 +21,10 @@ describe('Transition', function () {
     // multiple containers with the same name
     console.log('running docker compose file: ' + path.join(composeFileDir, 'docker-compose.yml'));
     dockerEnvironment = await new DockerComposeEnvironment(composeFileDir, 'docker-compose.yml')
-      .withWaitStrategy('aggregator-test', Wait.forLogMessage('listening on port ' + aggregatorPort))
+      .withWaitStrategy(containerName, Wait.forLogMessage('listening on port ' + aggregatorPort))
       .up();
-
     const container = dockerEnvironment.getContainer(containerName);
+
     const host = container.getHost();
     const port = container.getMappedPort(aggregatorPort);
     const aggregatorUrl = `http://${host}:${port}`;
