@@ -11,12 +11,12 @@
     "build:check": "tsc --noEmit",
     "lint": "eslint \"src/**/*\"",
     "lint:fix": "eslint \"src/**/*\" --fix",
-    "test": "node node_modules/.bin/jest --testPathPattern=tests --testPathIgnorePatterns=tests/e2e",
-    "test:unit": "node node_modules/.bin/jest --testPathPattern=tests/unit",
-    "test:integration": "node node_modules/.bin/jest --testPathPattern=tests/integration",
-    "test:e2e": "node node_modules/.bin/jest --testPathPattern=tests/e2e",
-    "test:ci": "node node_modules/.bin/jest --testPathPattern=tests --testPathIgnorePatterns=tests/e2e --ci --reporters=default",
-    "test:single": "node node_modules/.bin/jest",
+    "test": "jest --testPathPattern=tests --testPathIgnorePatterns=tests/e2e",
+    "test:unit": "jest --testPathPattern=tests/unit",
+    "test:integration": "jest --testPathPattern=tests/integration",
+    "test:e2e": "jest --testPathPattern=tests/e2e",
+    "test:ci": "jest --testPathPattern=tests --testPathIgnorePatterns=tests/e2e --ci --reporters=default",
+    "test:single": "jest",
     "prepublishOnly": "npm run build"
   },
   "repository": {
