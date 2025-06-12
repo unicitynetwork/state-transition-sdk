@@ -3,6 +3,7 @@ name: Build&Publish
 on:
   push:
     branches: [ main ]
+  pull_request:
   release:
     types: [published]
 
@@ -23,20 +24,24 @@ jobs:
         run: npm ci
 
       - name: Run tests
-        run: npm run test
+        run: npm run test:ci
 
-      - if: github.event_name != 'release'
+      # Only build and publish on push to main and release events
+      - name: Build and publish (main branch only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          NPM_PACKAGE_VERSION=`node -e "const fs = require('fs'); console.log(JSON.parse(fs.readFileSync('package.json')).version);"`
-          SHORT_SHA=`node -e "const sha = \"$GITHUB_SHA\"; console.log(sha.substring(0, 7));"`
+          NPM_PACKAGE_VERSION=$(node -e "const fs = require('fs'); console.log(JSON.parse(fs.readFileSync('package.json')).version);")
+          SHORT_SHA=$(echo $GITHUB_SHA | cut -c1-7)
           npm run build
-          npm --no-git-tag-version  version $NPM_PACKAGE_VERSION-rc.$SHORT_SHA
+          npm --no-git-tag-version version $NPM_PACKAGE_VERSION-rc.$SHORT_SHA
           npm publish --access public --tag dev
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPMJS_PUBLISH }}
           CI: true
-          GITHUB_SHA: $${{github.sha}}
-      - if: github.event_name == 'release'
+          GITHUB_SHA: ${{ github.sha }}
+
+      - name: Publish on release (main branch only)
+        if: github.event_name == 'release' && github.ref == 'refs/heads/main'
         run: |
           npm run build
           npm publish --access public
