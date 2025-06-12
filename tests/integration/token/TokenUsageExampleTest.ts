@@ -24,17 +24,6 @@ describe('Transition', function () {
       .withWaitStrategy(containerName, Wait.forLogMessage('listening on port ' + aggregatorPort))
       .up();
     const container = dockerEnvironment.getContainer(containerName);
-    const logStream = await container.logs();
-    logStream
-      .on('data', (line) => {
-        console.log(`${containerName} | ${line}`);
-      })
-      .on('err', (line) => {
-        console.error(`${containerName} | ${line}`);
-      })
-      .on('end', () => {
-        console.log(`${containerName} | log stream ended}`);
-      });
 
     const host = container.getHost();
     const port = container.getMappedPort(aggregatorPort);

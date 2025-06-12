@@ -15,7 +15,7 @@
     "test:unit": "jest --testPathPattern=tests/unit",
     "test:integration": "jest --testPathPattern=tests/integration",
     "test:e2e": "jest --testPathPattern=tests/e2e",
-    "test:ci": "jest --testPathPattern=tests --testPathIgnorePatterns=tests/e2e --ci --reporters=default",
+    "test:ci": "DEBUG=testcontainers:containers jest --testPathPattern=tests --testPathIgnorePatterns=tests/e2e --ci --reporters=default",
     "test:single": "jest",
     "prepublishOnly": "npm run build"
   },
