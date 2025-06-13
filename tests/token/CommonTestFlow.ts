@@ -156,7 +156,12 @@ export async function testSplitFlow(client: StateTransitionClient): Promise<void
         client
     );
 
-    performCheckForSplitTokens(splitTokens,coinsPerNewTokens)
+    const signingService = await SigningService.createFromSecret(
+        initialOwnerSecret,
+        splitTokens[0].state.unlockPredicate.nonce
+    );
+
+    performCheckForSplitTokens(splitTokens,coinsPerNewTokens,signingService)
 
   console.log('******************************************* Split token 1 *******************************************');
   console.log(exportFlow(splitTokens[0], null, true));
@@ -228,16 +233,14 @@ export async function testSplitFlowAfterTransfer(client: StateTransitionClient):
           client
       );
 
-      performCheckForSplitTokens(splitTokens,coinsPerNewTokens)
-
       const signingService = await SigningService.createFromSecret(
           initialOwnerSecret,
           splitTokens[0].state.unlockPredicate.nonce
       );
 
-      expect(splitTokens[0].state.unlockPredicate.isOwner(signingService.publicKey)).toBeTruthy();
+    performCheckForSplitTokens(splitTokens,coinsPerNewTokens,signingService)
 
-      const receiverNonce = crypto.getRandomValues(new Uint8Array(32));
+    const receiverNonce = crypto.getRandomValues(new Uint8Array(32));
       const recipientSigningService = await SigningService.createFromSecret(receiverSecret, receiverNonce);
 
       const reference = await MaskedPredicate.calculateReference(
@@ -319,7 +322,7 @@ export async function testSplitFlowAfterTransfer(client: StateTransitionClient):
           client
       );
 
-      performCheckForSplitTokens(splitTokens2,coinsPerNewTokens2)
+      performCheckForSplitTokens(splitTokens2,coinsPerNewTokens2, recipientSigningService)
 }
 
 // TODO: Should this function be moved into a different location in the library?
@@ -361,7 +364,7 @@ async function splitToken(
       coinsPerNewTokens.map(async (tokenCoinData, index) =>
           await createMintTokenDataForSplit(
               newTokenIds[index],
-              initialOwnerSecret,
+              ownerSecret,
               token.type,
               tokenCoinData
           )
@@ -402,15 +405,11 @@ async function splitToken(
       })
   );
 
-  const signingService = await SigningService.createFromSecret(initialOwnerSecret, splitTokens[0].state.unlockPredicate.nonce);
-  expect(splitTokens[0].state.unlockPredicate.isOwner(signingService.publicKey)).toBeTruthy();
-
   return splitTokens;
 }
 
 function performCheckForSplitTokens(
-    actualTokens: Token<any, any>[],
-    expectedCoinDataList: TokenCoinData[],
+    actualTokens: Token<any, any>[], expectedCoinDataList: TokenCoinData[], signingService: SigningService,
 ) {
     expect(actualTokens.length).toEqual(expectedCoinDataList.length);
 
@@ -430,5 +429,6 @@ function performCheckForSplitTokens(
         );
 
         expect(actualMap).toEqual(expectedMap);
+        expect(actualToken.state.unlockPredicate.isOwner(signingService.publicKey)).toBeTruthy();
     });
 }
