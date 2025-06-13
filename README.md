@@ -27,23 +27,45 @@ npm install @unicitylabs/state-transition-sdk
 ### Basic Usage
 
 Minting
+
 ```typescript
 // Create aggregator client
 const aggregatorClient = new AggregatorClient('https://gateway-test.unicity.network:443');
 const client = new StateTransitionClient(aggregatorClient);
 
-const commitment = await client.submitMintTransaction(/* mint parameters */);
+const secret = crypto.getRandomValues(new Uint8Array(128)); // User secret key
+const tokenId = TokenId.create(crypto.getRandomValues(new Uint8Array(32))); // Chosen ID
+const tokenType = TokenType.create(crypto.getRandomValues(new Uint8Array(32))); // Token type
+const tokenData = new TestTokenData(); /* Your own token data object with ISerializable attributes */
+const coinData = new TokenCoinData([/* [CoinId, value] elements to have coins in token */]);
+const salt = crypto.getRandomValues(new Uint8Array(32)); /* Your random salt bytes */
+const stateData = new Uint8Array()/* Your state data bytes */;
+
+const nonce = crypto.getRandomValues(new Uint8Array(32)); /* Your random nonce bytes */
+const signingService = await SigningService.createFromSecret(secret, nonce);
+const predicate = await MaskedPredicate.create(tokenId, tokenType, signingService, HashAlgorithm.SHA256, nonce);
+
+const commitment = await client.submitMintTransaction(
+  await DirectAddress.create(predicate.reference),
+  tokenId,
+  tokenType,
+  tokenData,
+  coinData,
+  salt,
+  await new DataHasher(HashAlgorithm.SHA256).update(stateData).digest(),
+  null,
+);
 // Since submit takes time, inclusion proof might not be immediately available
 const inclusionProof = await client.getInclusionProof(commitment);
 const mintTransaction = await client.createTransaction(commitment, inclusionProof);
 
 // Create token from transaction
 const token = new Token(
-  data.tokenId,
-  data.tokenType,
-  data.tokenData,
-  data.coinData,
-  await TokenState.create(data.predicate, data.data),
+  tokenId,
+  tokenType,
+  tokenData,
+  coinData,
+  await TokenState.create(predicate, stateData),
   [mintTransaction],
 );
 ```
@@ -138,6 +160,26 @@ const tokenData = new TokenCoinData([
 1. **Minting**: Create new tokens
 2. **Transfer**: Submit state transitions between owners
 3. **Completion**: Finalize transfers with new token state
+
+#### Transfer flow
+
+Prerequisites
+Recipient knows some info about token, like token type for generating address.
+
+```text
+A[Start] 
+A --> B[Recipient Generates Address]
+B --> C[Recipient Shares Address with Sender]
+C --> D[Sender Submits Transaction Commitment]
+D --> E[Sender Retrieves Inclusion Proof]
+E --> F[Sender Creates Transaction]
+F --> G[Sender Sends Transaction and Token to Recipient]
+G --> H[Recipient Imports Token and Transaction]
+H --> I[Recipient Verifies Transaction]
+I --> J[Recipient Finishes Transaction]
+J --> K[End]
+```
+
 
 ## Architecture
 
