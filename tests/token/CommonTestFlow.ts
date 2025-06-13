@@ -28,6 +28,8 @@ import { TestTokenData } from '../TestTokenData.js';
 const textEncoder = new TextEncoder();
 const initialOwnerSecret = new TextEncoder().encode('secret');
 const receiverSecret = new TextEncoder().encode('tere');
+const sumTreeHasherFactory = new DataHasherFactory(NodeDataHasher);
+const sumTreeHashAlgorithm = HashAlgorithm.SHA256;
 
 export async function testTransferFlow(client: StateTransitionClient): Promise<void> {
   const data = await createMintData(
@@ -101,11 +103,6 @@ export async function testTransferFlow(client: StateTransitionClient): Promise<v
 
 export async function testSplitFlow(client: StateTransitionClient): Promise<void> {
   // First, let's mint a token in the usual way.
-  const sumTreeHasherFactory = new DataHasherFactory(NodeDataHasher);
-  const sumTreeHashAlgorithm = HashAlgorithm.SHA256;
-
-  const secret = new TextEncoder().encode('secret');
-
   const unicityToken = new CoinId(crypto.getRandomValues(new Uint8Array(32)));
   const alphaToken = new CoinId(crypto.getRandomValues(new Uint8Array(32)));
 
@@ -113,7 +110,7 @@ export async function testSplitFlow(client: StateTransitionClient): Promise<void
     [unicityToken, 10n],
     [alphaToken, 20n],
   ]);
-  const mintTokenData = await createMintData(secret, coinData);
+  const mintTokenData = await createMintData(initialOwnerSecret, coinData);
   const mintCommitment = await client.submitMintTransaction(
     await DirectAddress.create(mintTokenData.predicate.reference),
     mintTokenData.tokenId,
@@ -149,85 +146,17 @@ export async function testSplitFlow(client: StateTransitionClient): Promise<void
     new TokenCoinData([[alphaToken, 15n]]),
   ];
 
-  const { commitment, recipientPredicate, newTokenIds, allCoinsTree, coinTrees } =
-    await client.submitBurnTransactionForSplit(
-      token,
-      coinsPerNewTokens,
-      sumTreeHasherFactory,
-      sumTreeHashAlgorithm,
-      secret,
-      mintTokenData.nonce,
-      await new DataHasher(HashAlgorithm.SHA256).update(textEncoder.encode('my custom data')).digest(),
-      textEncoder.encode('my message'),
+    const splitTokens = await splitToken(
+        token,
+        coinsPerNewTokens,
+        initialOwnerSecret,
+        mintTokenData.nonce,
+        'my custom data',
+        'my message',
+        client
     );
 
-  const transaction = await client.createTransaction(commitment, await waitInclusionProof(client, commitment));
-
-  const updatedToken = await client.finishTransaction(
-    token,
-    await TokenState.create(recipientPredicate, textEncoder.encode('my custom data')),
-    transaction,
-  );
-
-  const splitTokenData: IMintData[] = await Promise.all(
-    coinsPerNewTokens.map(
-      async (tokenCoinData, index) =>
-        await createMintTokenDataForSplit(newTokenIds[index], secret, mintTokenData.tokenType, tokenCoinData),
-    ),
-  );
-
-  const splitTokens = await Promise.all(
-    splitTokenData.map(async (tokenData) => {
-      const burnProofs: Map<string, [Path, SumPath]> = new Map();
-      for (const [coinId] of tokenData.coinData.coins) {
-        const pathToCoinTree = await allCoinsTree.getProof(
-          BigintConverter.decode(HexConverter.decode(coinId.toJSON())),
-        );
-        const pathToCoinAmount = await coinTrees
-          .get(coinId.toJSON())!
-          .getProof(BigintConverter.decode(HexConverter.decode(tokenData.tokenId.toJSON())));
-        burnProofs.set(coinId.toJSON(), [pathToCoinTree, pathToCoinAmount]);
-      }
-
-      const mintCommitment = await client.submitMintTransaction(
-        await DirectAddress.create(tokenData.predicate.reference),
-        tokenData.tokenId,
-        tokenData.tokenType,
-        tokenData.tokenData,
-        tokenData.coinData,
-        tokenData.salt,
-        await new DataHasher(HashAlgorithm.SHA256).update(tokenData.data).digest(),
-        new SplitProof(updatedToken, burnProofs),
-      );
-      const mintTransaction = await client.createTransaction(
-        mintCommitment,
-        await waitInclusionProof(client, mintCommitment),
-      );
-      return new Token(
-        tokenData.tokenId,
-        tokenData.tokenType,
-        tokenData.tokenData,
-        tokenData.coinData,
-        await TokenState.create(tokenData.predicate, tokenData.data),
-        [mintTransaction],
-      );
-    }),
-  );
-
-  expect(splitTokens.length).toEqual(2);
-
-  expect(splitTokens[0]!.coins!.toString()).toEqual(
-    dedent`
-        FungibleTokenData
-          ${unicityToken.toJSON()}: 10
-          ${alphaToken.toJSON()}: 5`,
-  );
-
-  expect(splitTokens[1]!.coins!.toString()).toEqual(
-    dedent`
-        FungibleTokenData
-          ${alphaToken.toJSON()}: 15`,
-  );
+    performCheckForSplitTokens(splitTokens,coinsPerNewTokens)
 
   console.log('******************************************* Split token 1 *******************************************');
   console.log(exportFlow(splitTokens[0], null, true));
@@ -242,8 +171,264 @@ export async function testSplitFlow(client: StateTransitionClient): Promise<void
   );
 }
 
+export async function testSplitFlowAfterTransfer(client: StateTransitionClient): Promise<void> {
+      const unicityToken = new CoinId(crypto.getRandomValues(new Uint8Array(32)));
+      const alphaToken = new CoinId(crypto.getRandomValues(new Uint8Array(32)));
+
+      const coinData = new TokenCoinData([
+        [unicityToken, 100n],
+        [alphaToken, 100n],
+      ]);
+
+      const mintTokenData = await createMintData(initialOwnerSecret, coinData);
+      const mintCommitment = await client.submitMintTransaction(
+          await DirectAddress.create(mintTokenData.predicate.reference),
+          mintTokenData.tokenId,
+          mintTokenData.tokenType,
+          mintTokenData.tokenData,
+          mintTokenData.coinData,
+          mintTokenData.salt,
+          await new DataHasher(HashAlgorithm.SHA256).update(mintTokenData.data).digest(),
+          null
+      );
+
+      const mintTransaction = await client.createTransaction(
+          mintCommitment,
+          await waitInclusionProof(client, mintCommitment),
+      );
+
+      const token = new Token(
+          mintTokenData.tokenId,
+          mintTokenData.tokenType,
+          mintTokenData.tokenData,
+          mintTokenData.coinData,
+          await TokenState.create(mintTokenData.predicate, mintTokenData.data),
+          [mintTransaction],
+      );
+
+      // Perfrom 1st split
+      const coinsPerNewTokens = [
+        new TokenCoinData([
+          [unicityToken, 50n],
+          [alphaToken, 50n],
+        ]),
+        new TokenCoinData([
+            [unicityToken, 50n],
+            [alphaToken, 50n],
+        ])
+      ];
+
+      const splitTokens = await splitToken(
+          token,
+          coinsPerNewTokens,
+          initialOwnerSecret,
+          mintTokenData.nonce,
+          'my custom data',
+          'my message',
+          client
+      );
+
+      performCheckForSplitTokens(splitTokens,coinsPerNewTokens)
+
+      const signingService = await SigningService.createFromSecret(
+          initialOwnerSecret,
+          splitTokens[0].state.unlockPredicate.nonce
+      );
+
+      expect(splitTokens[0].state.unlockPredicate.isOwner(signingService.publicKey)).toBeTruthy();
+
+      const receiverNonce = crypto.getRandomValues(new Uint8Array(32));
+      const recipientSigningService = await SigningService.createFromSecret(receiverSecret, receiverNonce);
+
+      const reference = await MaskedPredicate.calculateReference(
+          splitTokens[0].type,
+          "secp256k1",
+          recipientSigningService.publicKey,
+          HashAlgorithm.SHA256,
+          receiverNonce
+      );
+      const recipientAddress = await DirectAddress.create(reference);
+
+      // Create transfer transaction
+      const sendTokenTx = await sendToken(
+          client,
+          splitTokens[0],
+          await SigningService.createFromSecret(initialOwnerSecret, splitTokens[0].state.unlockPredicate.nonce),
+          recipientAddress
+      );
+
+      //sender export token with transfer transaction
+      const tokenJson = exportFlow(splitTokens[0], sendTokenTx, true);
+
+      // Recipient imports token and transaction
+      const receiverImportedToken = await new TokenFactory(new PredicateFactory()).create(
+          JSON.parse(tokenJson).token,
+          TestTokenData.fromJSON
+      );
+
+      const importedTransaction = await Transaction.fromJSON(
+          receiverImportedToken.id,
+          receiverImportedToken.type,
+          JSON.parse(tokenJson).transaction as ITransactionJson<ITransactionDataJson>,
+          new PredicateFactory(),
+      );
+
+      const maskedPredicate = await MaskedPredicate.create(
+          receiverImportedToken.id,
+          receiverImportedToken.type,
+          recipientSigningService,
+          HashAlgorithm.SHA256,
+          receiverNonce,
+      );
+
+      // Finish the transaction with the recipient predicate
+      const updateToken = await client.finishTransaction(
+          receiverImportedToken,
+          await TokenState.create(
+              maskedPredicate,
+              textEncoder.encode('my custom data')
+          ),
+          importedTransaction,
+      );
+
+      expect(receiverImportedToken.state.unlockPredicate.isOwner(recipientSigningService.publicKey)).toBeTruthy();
+      expect(updateToken.id).toEqual(splitTokens[0].id);
+      expect(updateToken.type).toEqual(splitTokens[0].type);
+      expect(updateToken.data.toJSON()).toEqual(splitTokens[0].data.toJSON());
+      expect(updateToken.coins?.toJSON()).toEqual(splitTokens[0].coins?.toJSON());
+
+      // Now let's split that received token into 2 tokens.
+      const coinsPerNewTokens2 = [
+        new TokenCoinData([
+          [unicityToken, 26n],
+          [alphaToken, 27n],
+        ]),
+        new TokenCoinData([
+          [unicityToken, 24n],
+          [alphaToken, 23n],
+        ])
+      ];
+
+      const splitTokens2 = await splitToken(
+          updateToken,
+          coinsPerNewTokens2,
+          receiverSecret,
+          receiverNonce,
+          "my custom data",
+          "my custom message",
+          client
+      );
+
+      performCheckForSplitTokens(splitTokens2,coinsPerNewTokens2)
+}
+
 // TODO: Should this function be moved into a different location in the library?
 function exportFlow(token, transaction, pretify) {
   const flow = { token, transaction };
   return pretify ? JSON.stringify(flow, null, 4) : JSON.stringify(flow);
+}
+
+async function splitToken(
+    token, coinsPerNewTokens, ownerSecret, nonce, customDataString, customMessage, client: StateTransitionClient){
+  const { commitment, recipientPredicate, newTokenIds, allCoinsTree, coinTrees }  = await client.submitBurnTransactionForSplit(
+      token,
+      coinsPerNewTokens,
+      sumTreeHasherFactory,
+      sumTreeHashAlgorithm,
+      ownerSecret,
+      nonce,
+      await new DataHasher(HashAlgorithm.SHA256).update(
+          textEncoder.encode(customDataString)
+      ).digest(),
+      textEncoder.encode(customMessage)
+  );
+
+  const transaction = await client.createTransaction(
+      commitment,
+      await waitInclusionProof(client, commitment)
+  );
+
+  const updatedToken = await client.finishTransaction(
+      token,
+      await TokenState.create(
+          recipientPredicate,
+          textEncoder.encode(customDataString)
+      ),
+      transaction,
+  );
+
+  const splitTokenData: IMintData[] = await Promise.all(
+      coinsPerNewTokens.map(async (tokenCoinData, index) =>
+          await createMintTokenDataForSplit(
+              newTokenIds[index],
+              initialOwnerSecret,
+              token.type,
+              tokenCoinData
+          )
+      )
+  );
+
+  const splitTokens = await Promise.all(
+      splitTokenData.map(async tokenData => {
+        const burnProofs: Map<string, [Path, SumPath]> = new Map();
+        for (let [coinId, amount] of tokenData.coinData.coins) {
+          const pathToCoinTree = await allCoinsTree.getProof(BigintConverter.decode(HexConverter.decode(coinId.toJSON())));
+          const pathToCoinAmount = await coinTrees.get(coinId.toJSON())!.getProof(BigintConverter.decode(HexConverter.decode(tokenData.tokenId.toJSON())));
+          burnProofs.set(coinId.toJSON(), [pathToCoinTree, pathToCoinAmount]);
+        }
+
+        const mintCommitment = await client.submitMintTransaction(
+            await DirectAddress.create(tokenData.predicate.reference),
+            tokenData.tokenId,
+            tokenData.tokenType,
+            tokenData.tokenData,
+            tokenData.coinData,
+            tokenData.salt,
+            await new DataHasher(HashAlgorithm.SHA256).update(tokenData.data).digest(),
+            new SplitProof(updatedToken, burnProofs)
+        );
+        const mintTransaction = await client.createTransaction(
+            mintCommitment,
+            await waitInclusionProof(client, mintCommitment),
+        );
+        return new Token(
+            tokenData.tokenId,
+            tokenData.tokenType,
+            tokenData.tokenData,
+            tokenData.coinData,
+            await TokenState.create(tokenData.predicate, tokenData.data),
+            [mintTransaction],
+        );
+      })
+  );
+
+  const signingService = await SigningService.createFromSecret(initialOwnerSecret, splitTokens[0].state.unlockPredicate.nonce);
+  expect(splitTokens[0].state.unlockPredicate.isOwner(signingService.publicKey)).toBeTruthy();
+
+  return splitTokens;
+}
+
+function performCheckForSplitTokens(
+    actualTokens: Token<any, any>[],
+    expectedCoinDataList: TokenCoinData[],
+) {
+    expect(actualTokens.length).toEqual(expectedCoinDataList.length);
+
+    actualTokens.forEach((actualToken, index) => {
+        const expectedCoins = expectedCoinDataList[index].coins;
+
+        const actualCoins = actualToken.coins?.coins;
+        if (!actualCoins) {
+            throw new Error(`actualToken at index ${index} has no coins`);
+        }
+
+        const expectedMap = new Map(
+            expectedCoins.map(([id, amount]) => [id.toJSON(), amount]),
+        );
+        const actualMap = new Map(
+            actualCoins.map(([id, amount]) => [id.toJSON(), amount]),
+        );
+
+        expect(actualMap).toEqual(expectedMap);
+    });
 }
