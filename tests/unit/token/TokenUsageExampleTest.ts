@@ -2,7 +2,7 @@ import { HashAlgorithm } from '@unicitylabs/commons/lib/hash/HashAlgorithm.js';
 import { SparseMerkleTree } from '@unicitylabs/commons/lib/smt/SparseMerkleTree.js';
 
 import { StateTransitionClient } from '../../../src/StateTransitionClient.js';
-import { testTransferFlow, testSplitFlow } from '../../token/CommonTestFlow.js';
+import { testTransferFlow, testSplitFlow, testSplitFlowAfterTransfer } from '../../token/CommonTestFlow.js';
 import { TestAggregatorClient } from '../TestAggregatorClient.js';
 
 describe('Transition', function () {
@@ -14,5 +14,9 @@ describe('Transition', function () {
 
   it('should split tokens', async () => {
     await testSplitFlow(client);
+  }, 15000);
+
+  it('should split tokens after transfer', async () => {
+    await testSplitFlowAfterTransfer(client);
   }, 15000);
 });
