@@ -60,7 +60,9 @@ export class CertifiedMintTransactionVerificationRule {
       verificationContext.trustBase,
       verificationContext.predicateVerifier,
       genesis.inclusionProof,
-      genesis,
+      await genesis.calculateTransactionHash(),
+      genesis.lockScript,
+      genesis.sourceStateHash,
     );
     results.push(result);
     if (result.status !== InclusionProofVerificationStatus.OK) {

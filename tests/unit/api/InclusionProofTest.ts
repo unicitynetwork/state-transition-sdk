@@ -68,25 +68,26 @@ describe('InclusionProof', () => {
   });
 
   it('verifies', async () => {
+    const transactionHash = await transaction.calculateTransactionHash();
     await expect(
       InclusionProofVerificationRule.verify(
         trustBase,
         predicateVerifier,
         new InclusionProof(certificationData, inclusionCertificate, unicityCertificate),
-        transaction,
+        transactionHash,
+        transaction.lockScript,
+        transaction.sourceStateHash,
       ).then((result) => result.status),
     ).resolves.toEqual(InclusionProofVerificationStatus.OK);
+
     await expect(
       InclusionProofVerificationRule.verify(
         trustBase,
         predicateVerifier,
         new InclusionProof(certificationData, null, unicityCertificate),
-        await MintTransaction.create(
-          transaction.networkId,
-          transaction.lockScript,
-          transaction.data,
-          transaction.tokenType,
-        ),
+        transactionHash,
+        transaction.lockScript,
+        transaction.sourceStateHash,
       ).then((result) => result.status),
     ).resolves.toEqual(InclusionProofVerificationStatus.INCLUSION_CERTIFICATE_MISSING);
   });
@@ -117,7 +118,9 @@ describe('InclusionProof', () => {
         trustBase,
         predicateVerifier,
         invalidTransactionHashInclusionProof,
-        transaction,
+        await transaction.calculateTransactionHash(),
+        transaction.lockScript,
+        transaction.sourceStateHash,
       ).then((result) => result.status),
     ).resolves.toEqual(InclusionProofVerificationStatus.TRANSACTION_HASH_MISMATCH);
   });
@@ -141,9 +144,14 @@ describe('InclusionProof', () => {
     );
 
     await expect(
-      InclusionProofVerificationRule.verify(trustBase, predicateVerifier, inclusionProof, transaction).then(
-        (result) => result.status,
-      ),
+      InclusionProofVerificationRule.verify(
+        trustBase,
+        predicateVerifier,
+        inclusionProof,
+        await transaction.calculateTransactionHash(),
+        transaction.lockScript,
+        transaction.sourceStateHash,
+      ).then((result) => result.status),
     ).resolves.toEqual(InclusionProofVerificationStatus.NOT_AUTHENTICATED);
   });
 
@@ -155,7 +163,9 @@ describe('InclusionProof', () => {
         createRootTrustBase(HexConverter.decode('0000000000000000000000000000000000000000000000000000000000000001')),
         predicateVerifier,
         inclusionProof,
-        transaction,
+        await transaction.calculateTransactionHash(),
+        transaction.lockScript,
+        transaction.sourceStateHash,
       ).then((result) => result.status),
     ).resolves.toEqual(InclusionProofVerificationStatus.INVALID_TRUSTBASE);
   });

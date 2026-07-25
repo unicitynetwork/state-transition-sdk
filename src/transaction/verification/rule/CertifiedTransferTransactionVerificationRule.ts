@@ -24,7 +24,9 @@ export class CertifiedTransferTransactionVerificationRule {
       verificationContext.trustBase,
       verificationContext.predicateVerifier,
       transaction.inclusionProof,
-      transaction,
+      await transaction.calculateTransactionHash(),
+      transaction.lockScript,
+      transaction.sourceStateHash,
     );
     results.push(result);
 

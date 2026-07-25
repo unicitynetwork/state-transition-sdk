@@ -9,7 +9,6 @@ import { EncodedPredicate } from '../../../predicate/EncodedPredicate.js';
 import { PredicateVerifierService } from '../../../predicate/verification/PredicateVerifierService.js';
 import { VerificationResult } from '../../../verification/VerificationResult.js';
 import { VerificationStatus } from '../../../verification/VerificationStatus.js';
-import { ITransaction } from '../../ITransaction.js';
 
 /**
  * Status codes for verifying an InclusionProof.
@@ -31,19 +30,25 @@ export enum InclusionProofVerificationStatus {
  */
 export class InclusionProofVerificationRule {
   /**
-   * Verify an inclusion proof for a transaction.
+   * Verify an inclusion proof for a transaction, given the transaction data the proof
+   * attests to: its canonical hash, the lock script being unlocked, and the source state
+   * being spent.
    *
    * @param {RootTrustBase} trustBase Root trust base.
    * @param {PredicateVerifierService} predicateVerifierFactory Predicate verifier service.
    * @param {InclusionProof} inclusionProof Inclusion proof to verify.
-   * @param {ITransaction} transaction Transaction the proof should attest to.
+   * @param {DataHash} transactionHash Canonical hash of the transaction.
+   * @param {EncodedPredicate} lockScript Lock script the transaction unlocks.
+   * @param {DataHash} sourceStateHash Hash of the state the transaction spends.
    * @returns {Promise<VerificationResult<InclusionProofVerificationStatus>>} Verification outcome.
    */
   public static async verify(
     trustBase: RootTrustBase,
     predicateVerifierFactory: PredicateVerifierService,
     inclusionProof: InclusionProof,
-    transaction: ITransaction,
+    transactionHash: DataHash,
+    lockScript: EncodedPredicate,
+    sourceStateHash: DataHash,
   ): Promise<VerificationResult<InclusionProofVerificationStatus>> {
     if (!inclusionProof.inclusionCertificate) {
       return new VerificationResult(
@@ -60,7 +65,7 @@ export class InclusionProofVerificationRule {
       );
     }
 
-    if (!certificationData.transactionHash.equals(await transaction.calculateTransactionHash())) {
+    if (!certificationData.transactionHash.equals(transactionHash)) {
       return new VerificationResult(
         'InclusionProofVerificationRule',
         InclusionProofVerificationStatus.TRANSACTION_HASH_MISMATCH,
@@ -68,8 +73,8 @@ export class InclusionProofVerificationRule {
     }
 
     if (
-      !EncodedPredicate.equals(certificationData.lockScript, transaction.lockScript) ||
-      !certificationData.sourceStateHash.equals(transaction.sourceStateHash)
+      !EncodedPredicate.equals(certificationData.lockScript, lockScript) ||
+      !certificationData.sourceStateHash.equals(sourceStateHash)
     ) {
       return new VerificationResult(
         'InclusionProofVerificationRule',
@@ -77,7 +82,7 @@ export class InclusionProofVerificationRule {
       );
     }
 
-    const stateId = await StateId.fromTransaction(transaction);
+    const stateId = await StateId.fromCertificationData(certificationData);
     const result = await inclusionProof.inclusionCertificate.verify(
       stateId,
       certificationData.transactionHash,
@@ -112,8 +117,8 @@ export class InclusionProofVerificationRule {
     }
 
     const predicateVerificationResult = await predicateVerifierFactory.verify(
-      transaction.lockScript,
-      transaction.sourceStateHash,
+      lockScript,
+      sourceStateHash,
       certificationData.transactionHash,
       certificationData.unlockScript,
     );

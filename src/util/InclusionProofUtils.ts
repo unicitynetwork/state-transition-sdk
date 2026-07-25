@@ -57,6 +57,7 @@ export async function waitInclusionProof(
   interval: number = 1000,
 ): Promise<InclusionProof> {
   const stateId = await StateId.fromTransaction(transaction);
+  const transactionHash = await transaction.calculateTransactionHash();
   while (true) {
     try {
       const inclusionProof = await client.getInclusionProof(stateId).then((response) => response.inclusionProof);
@@ -64,7 +65,9 @@ export async function waitInclusionProof(
         trustBase,
         predicateVerifier,
         inclusionProof,
-        transaction,
+        transactionHash,
+        transaction.lockScript,
+        transaction.sourceStateHash,
       );
 
       switch (verificationStatus.status) {
