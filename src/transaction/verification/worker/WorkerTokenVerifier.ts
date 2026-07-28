@@ -76,6 +76,57 @@ function toBatchResults(response: TransferTransactionVerificationResponse): ITra
 }
 
 /**
+ * Validate a batch response against the transfer indices requested from the worker:
+ * exactly one well-formed result per requested index.
+ *
+ * @param {ITransferTransactionVerificationResult[]} batch Batch response to validate.
+ * @param {readonly number[]} indices Transfer indices requested from the worker.
+ * @returns {ITransferTransactionVerificationResult[]} The validated batch.
+ * @throws {Error} If a result is malformed, a status is invalid, an index is duplicate or
+ * unexpected, or a requested index has no result.
+ */
+function toValidatedBatchResults(
+  batch: ITransferTransactionVerificationResult[],
+  indices: readonly number[],
+): ITransferTransactionVerificationResult[] {
+  const pending = new Set(indices);
+  for (const result of batch as readonly unknown[]) {
+    if (typeof result !== 'object' || result === null) {
+      throw new Error('Invalid worker response: result is not an object.');
+    }
+
+    const { index, message, status } = result as { index?: unknown; message?: unknown; status?: unknown };
+    if (typeof index !== 'number' || !Number.isInteger(index)) {
+      throw new Error('Invalid worker response: transfer index is not an integer.');
+    }
+
+    if (!pending.has(index)) {
+      throw new Error(
+        indices.includes(index)
+          ? `Invalid worker response: duplicate result for transfer ${index}.`
+          : `Invalid worker response: unexpected transfer index ${index}.`,
+      );
+    }
+
+    if (typeof message !== 'string') {
+      throw new Error(`Invalid worker response: message of transfer ${index} is not a string.`);
+    }
+
+    if (status !== VerificationStatus.OK && status !== VerificationStatus.FAIL) {
+      throw new Error(`Invalid worker response: invalid status of transfer ${index}.`);
+    }
+
+    pending.delete(index);
+  }
+
+  if (pending.size > 0) {
+    throw new Error(`Invalid worker response: missing result for transfer ${[...pending][0]}.`);
+  }
+
+  return batch;
+}
+
+/**
  * One certified transfer in the worker wire format: the original transfer CBOR together
  * with its inclusion proof and the chain-derived source state hash and lock script,
  * decodable and verifiable without the rest of the token.
@@ -377,13 +428,15 @@ export abstract class WorkerTokenVerifier implements ITokenVerifier {
       if (transactions.length > 0) {
         const batches = await Promise.all(
           this.partition(transactions.length).map((indices) =>
-            this.pool.run({
-              transfers: indices.map((index) => ({
-                bytes: WorkerTransferTransaction.toCBOR(transactions[index]),
-                index,
-              })),
-              trustBase: trustBaseJson,
-            }),
+            this.pool
+              .run({
+                transfers: indices.map((index) => ({
+                  bytes: WorkerTransferTransaction.toCBOR(transactions[index]),
+                  index,
+                })),
+                trustBase: trustBaseJson,
+              })
+              .then((batch) => toValidatedBatchResults(batch, indices)),
           ),
         );
 

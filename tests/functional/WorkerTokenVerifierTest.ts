@@ -242,6 +242,56 @@ describe('WorkerTokenVerifier', () => {
     expect(result.results[0].message).toEqual('Transfer verification failed');
   }, 30000);
 
+  it('rejects an empty worker response', async () => {
+    const verifier = new TestWorkerTokenVerifier(2, () => Promise.resolve([]));
+
+    await expect(verifier.verify(token, context)).rejects.toThrow(
+      'Invalid worker response: missing result for transfer',
+    );
+  });
+
+  it('rejects a partial worker response', async () => {
+    const verifier = new TestWorkerTokenVerifier(1, () =>
+      Promise.resolve([{ index: 0, message: '', status: VerificationStatus.OK }]),
+    );
+
+    await expect(verifier.verify(token, context)).rejects.toThrow(
+      'Invalid worker response: missing result for transfer 1',
+    );
+  });
+
+  it('rejects a duplicate result for the same transfer', async () => {
+    const result = { index: 0, message: '', status: VerificationStatus.OK };
+    const verifier = new TestWorkerTokenVerifier(1, () => Promise.resolve([result, result]));
+
+    await expect(verifier.verify(token, context)).rejects.toThrow(
+      'Invalid worker response: duplicate result for transfer 0',
+    );
+  });
+
+  it('rejects a result for a transfer that was not requested', async () => {
+    const verifier = new TestWorkerTokenVerifier(1, () =>
+      Promise.resolve([{ index: 5, message: '', status: VerificationStatus.OK }]),
+    );
+
+    await expect(verifier.verify(token, context)).rejects.toThrow(
+      'Invalid worker response: unexpected transfer index 5',
+    );
+  });
+
+  it('rejects a result with an invalid status', async () => {
+    const verifier = new TestWorkerTokenVerifier(1, () =>
+      Promise.resolve([
+        { index: 0, message: '', status: 'BOGUS' as VerificationStatus },
+        { index: 1, message: '', status: VerificationStatus.OK },
+      ]),
+    );
+
+    await expect(verifier.verify(token, context)).rejects.toThrow(
+      'Invalid worker response: invalid status of transfer 0',
+    );
+  });
+
   it('rejects when a worker replies with the error envelope', async () => {
     const verifier = new TestWorkerTokenVerifier(2, () => Promise.resolve({ error: 'boom' }));
 
