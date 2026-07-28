@@ -168,30 +168,49 @@ class WorkerTransferTransaction {
 }
 
 /**
- * Verify every transfer in the request against its trust base with the built-in predicate
- * verifier.
- *
- * @param {ITransferTransactionVerificationRequest} request The batch to verify.
- * @returns {Promise<TransferTransactionVerificationResponse>} Batch results, or the error to report back.
+ * Worker-side verifier for transfer batches: creates a verification context for each
+ * batch and verifies every transfer in it against that context. A subclass defines how
+ * the context is created; the worker entry script runs an instance.
  */
-export async function verifyTransferTransactions(
-  request: ITransferTransactionVerificationRequest,
-): Promise<TransferTransactionVerificationResponse> {
-  try {
-    const trustBase = RootTrustBase.fromJSON(request.trustBase);
-    const predicateVerifier = PredicateVerifierService.create();
+export abstract class TransferTransactionVerifier {
+  /**
+   * Verify every transfer in the request with a context created for the batch.
+   *
+   * @param {ITransferTransactionVerificationRequest} request The batch to verify.
+   * @returns {Promise<TransferTransactionVerificationResponse>} Batch results, or the error to report back.
+   */
+  public async verify(
+    request: ITransferTransactionVerificationRequest,
+  ): Promise<TransferTransactionVerificationResponse> {
+    try {
+      const context = await this.createContext(RootTrustBase.fromJSON(request.trustBase));
 
-    const results: ITransferTransactionVerificationResult[] = [];
-    for (const transfer of request.transfers) {
-      const transaction = WorkerTransferTransaction.fromCBOR(transfer.bytes);
-      const result = await transaction.verify(trustBase, predicateVerifier);
-      results.push({ index: transfer.index, message: result.message, status: result.status });
+      const results: ITransferTransactionVerificationResult[] = [];
+      for (const transfer of request.transfers) {
+        const transaction = WorkerTransferTransaction.fromCBOR(transfer.bytes);
+        const result = await transaction.verify(context.trustBase, context.predicateVerifier);
+        results.push({ index: transfer.index, message: result.message, status: result.status });
+      }
+
+      return results;
+    } catch (error) {
+      return { error: (error instanceof Error && error.stack) || String(error) };
     }
-
-    return results;
-  } catch (error) {
-    return { error: (error instanceof Error && error.stack) || String(error) };
   }
+
+  /**
+   * Create the verification context for one batch.
+   *
+   * Must create a context equivalent to the one the main thread passes to
+   * {@link WorkerTokenVerifier.verify} (same verifiers and registries): the two contexts
+   * are built independently on each side of the worker boundary, and if they differ, the
+   * transfers verified here and the genesis verified on the main thread are judged under
+   * different rules — the token verdict silently diverges from {@link Token.verify}.
+   *
+   * @param {RootTrustBase} trustBase Trust base shipped with the batch.
+   * @returns {Promise<IVerificationContext>} Context to verify the batch with.
+   */
+  protected abstract createContext(trustBase: RootTrustBase): Promise<IVerificationContext>;
 }
 
 /**
@@ -296,14 +315,16 @@ class WorkerPool {
 }
 
 /**
- * Base for the SDK's worker-pool {@link ITokenVerifier} implementations (Node worker
- * threads, browser Web Workers). Verifies the genesis and walks the provenance on the
- * calling thread, and fans each token's transfer verifications out to a shared pool of
- * workers reused across every {@link verify}. A subclass supplies {@link createWorker}.
+ * Base for worker-pool {@link ITokenVerifier} implementations. Verifies the genesis and
+ * walks the provenance on the calling thread, and fans each token's transfer
+ * verifications out to a shared pool of workers reused across every {@link verify}. A
+ * consumer subclass supplies {@link createWorker} for its platform (Node worker threads
+ * via the {@link NodeWorker} adapter, browser Web Workers as-is).
  *
- * Each worker rebuilds the trust base shipped with the batch and verifies with the
- * built-in predicate verifier; custom (non-built-in) predicate verifiers are not
- * available in the worker. Call {@link dispose} to terminate the pool.
+ * Each worker runs a consumer-authored entry script bootstrapping a
+ * {@link NodeTransferTransactionVerifierWorker} or
+ * {@link BrowserTransferTransactionVerifierWorker} subclass, so every batch is verified
+ * with the context that subclass creates. Call {@link dispose} to terminate the pool.
  */
 export abstract class WorkerTokenVerifier implements ITokenVerifier {
   private readonly pool: WorkerPool;
