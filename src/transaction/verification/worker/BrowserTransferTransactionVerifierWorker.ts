@@ -9,9 +9,9 @@ declare function postMessage(message: unknown): void;
 
 /**
  * Base for browser worker entry scripts: a {@link TransferTransactionVerifier} that runs
- * itself in the Web Worker. A consumer entry script extends it with its `createContext`,
- * instantiates it and calls {@link bootstrap}; a {@link WorkerTokenVerifier} subclass's
- * `createWorker` spawns that script.
+ * itself in the Web Worker. A consumer entry script extends it with its predicate
+ * verifier, instantiates it and calls {@link bootstrap}; a {@link WorkerTokenVerifier}
+ * subclass's `createWorker` spawns that script.
  */
 export abstract class BrowserTransferTransactionVerifierWorker extends TransferTransactionVerifier {
   /**

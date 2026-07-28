@@ -4,8 +4,8 @@ import { ITransferTransactionVerificationRequest, TransferTransactionVerifier } 
 
 /**
  * Base for Node.js worker entry scripts: a {@link TransferTransactionVerifier} that runs
- * itself in the worker thread. A consumer entry script extends it with its
- * `createContext`, instantiates it and calls {@link bootstrap}; a
+ * itself in the worker thread. A consumer entry script extends it with its predicate
+ * verifier, instantiates it and calls {@link bootstrap}; a
  * {@link WorkerTokenVerifier} subclass's `createWorker` spawns that script.
  */
 export abstract class NodeTransferTransactionVerifierWorker extends TransferTransactionVerifier {

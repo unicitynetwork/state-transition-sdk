@@ -4,7 +4,6 @@ import { Worker } from 'node:worker_threads';
 
 import { ExampleTransferTransactionVerifierWorker } from './ExampleTransferTransactionVerifierWorker.js';
 import { TestAggregatorClient } from './TestAggregatorClient.js';
-import { RootTrustBase } from '../../src/api/bft/RootTrustBase.js';
 import { SigningService } from '../../src/crypto/secp256k1/SigningService.js';
 import { SignaturePredicate } from '../../src/predicate/builtin/SignaturePredicate.js';
 import { PredicateVerifierService } from '../../src/predicate/verification/PredicateVerifierService.js';
@@ -192,25 +191,13 @@ describe('WorkerTokenVerifier', () => {
     expect(verifier.created).toEqual(0); // nothing to offload, no worker spawned
   }, 30000);
 
-  it('verifies with the context the worker was bootstrapped to create', async () => {
-    const predicateVerifier = PredicateVerifierService.create();
-    const verifySpy = jest.spyOn(predicateVerifier, 'verify');
-    let contexts = 0;
+  it('verifies with the predicate verifier the worker was bootstrapped with', async () => {
+    const customPredicateVerifier = PredicateVerifierService.create();
+    const verifySpy = jest.spyOn(customPredicateVerifier, 'verify');
 
     class CustomTransferTransactionVerifier extends TransferTransactionVerifier {
-      private readonly mintJustificationVerifier = new MintJustificationVerifierService();
-      private readonly tokenIssuanceVerifier = new TokenIssuanceVerifierService(false);
-
-      protected createContext(batchTrustBase: RootTrustBase): Promise<IVerificationContext> {
-        contexts++;
-        return Promise.resolve(
-          new VerificationContext(
-            batchTrustBase,
-            predicateVerifier,
-            this.mintJustificationVerifier,
-            this.tokenIssuanceVerifier,
-          ),
-        );
+      protected get predicateVerifier(): PredicateVerifierService {
+        return customPredicateVerifier;
       }
     }
 
@@ -219,7 +206,6 @@ describe('WorkerTokenVerifier', () => {
 
     const result = await verifier.verify(token, context);
     expect(result.status).toEqual(VerificationStatus.OK);
-    expect(contexts).toEqual(2); // one context per batch
     expect(verifySpy).toHaveBeenCalledTimes(2); // once per transfer
 
     verifier.dispose();

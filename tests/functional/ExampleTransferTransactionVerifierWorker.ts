@@ -1,15 +1,9 @@
-import { RootTrustBase } from '../../src/api/bft/RootTrustBase.js';
 import { PredicateVerifierService } from '../../src/predicate/verification/PredicateVerifierService.js';
-import { IVerificationContext } from '../../src/transaction/verification/IVerificationContext.js';
-import { MintJustificationVerifierService } from '../../src/transaction/verification/MintJustificationVerifierService.js';
-import { TokenIssuanceVerifierService } from '../../src/transaction/verification/TokenIssuanceVerifierService.js';
-import { VerificationContext } from '../../src/transaction/verification/VerificationContext.js';
 import { NodeTransferTransactionVerifierWorker } from '../../src/transaction/verification/worker/NodeTransferTransactionVerifierWorker.js';
 
 /**
- * Example Node.js worker entry script: verifies with the built-in predicate verifier and
- * empty registries, created once; each batch's context binds them to the shipped trust
- * base.
+ * Example Node.js worker entry script: verifies with the built-in predicate verifier,
+ * created once and shared across batches.
  *
  * In a real deployment this file is its own compiled module, spawned from a
  * {@link WorkerTokenVerifier} subclass's `createWorker` with
@@ -18,19 +12,10 @@ import { NodeTransferTransactionVerifierWorker } from '../../src/transaction/ver
  * serves as the worker body for {@link FakeWorker}-based tests.
  */
 export class ExampleTransferTransactionVerifierWorker extends NodeTransferTransactionVerifierWorker {
-  private readonly mintJustificationVerifier = new MintJustificationVerifierService();
-  private readonly predicateVerifier = PredicateVerifierService.create();
-  private readonly tokenIssuanceVerifier = new TokenIssuanceVerifierService(false);
+  private readonly verifier = PredicateVerifierService.create();
 
-  protected createContext(trustBase: RootTrustBase): Promise<IVerificationContext> {
-    return Promise.resolve(
-      new VerificationContext(
-        trustBase,
-        this.predicateVerifier,
-        this.mintJustificationVerifier,
-        this.tokenIssuanceVerifier,
-      ),
-    );
+  protected get predicateVerifier(): PredicateVerifierService {
+    return this.verifier;
   }
 }
 
