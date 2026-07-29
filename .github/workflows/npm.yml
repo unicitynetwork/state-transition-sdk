@@ -56,6 +56,10 @@ jobs:
       - name: Publish on release
         if: github.event_name == 'release'
         run: |
+          VERSION="${RELEASE_TAG#v}"
+          echo "Publishing version $VERSION from release tag $RELEASE_TAG"
+          npm --no-git-tag-version version "$VERSION" --allow-same-version
           npm publish --access public
         env:
           CI: true
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
