@@ -131,7 +131,9 @@ export class CertifiedMintTransaction implements ITransaction {
       trustBase,
       predicateVerifier,
       inclusionProof,
-      transaction,
+      await transaction.calculateTransactionHash(),
+      transaction.lockScript,
+      transaction.sourceStateHash,
     );
     if (result.status !== InclusionProofVerificationStatus.OK) {
       throw new VerificationError('Inclusion proof verification failed', result);

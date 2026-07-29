@@ -27,6 +27,20 @@ describe('RootTrustBase', () => {
     expect(trustBase.rootNodes.size).toBe(1);
   });
 
+  it('should round-trip through toJSON', () => {
+    const json = trustBaseJson({
+      changeRecordHash: 'aabb',
+      previousEntryHash: 'ccdd',
+      signatures: { NODE: '1122' },
+      stateHash: '00ff',
+    });
+
+    const roundTripped = RootTrustBase.fromJSON(json).toJSON();
+    expect(roundTripped).toEqual(json);
+    // toJSON output must itself be valid fromJSON input (this is how a worker rebuilds it).
+    expect(RootTrustBase.fromJSON(roundTripped).toJSON()).toEqual(roundTripped);
+  });
+
   it('should reject an unsupported version', () => {
     expect(() => RootTrustBase.fromJSON(trustBaseJson({ version: '2' }))).toThrow(JsonError);
   });

@@ -12,7 +12,7 @@ import { dedent } from '../util/StringUtils.js';
 import { VerificationError } from '../verification/VerificationError.js';
 import { VerificationResult } from '../verification/VerificationResult.js';
 import { VerificationStatus } from '../verification/VerificationStatus.js';
-import { CertifiedMintTransactionVerificationRule } from './verification/rule/CertifiedMintTransactionVerificationRule.js';
+import { TokenVerifier } from './verification/default/TokenVerifier.js';
 import { CertifiedTransferTransactionVerificationRule } from './verification/rule/CertifiedTransferTransactionVerificationRule.js';
 
 /**
@@ -173,84 +173,15 @@ export class Token {
   }
 
   /**
-   * Verify the genesis and every transfer in this token.
-   *
-   * Tokens embedded in a mint justification (such as the burned source token of
-   * a split) are collected during verification and verified iteratively from a
-   * worklist rather than recursively, so an arbitrarily long provenance chain is
-   * walked without recursion. Each verified token contributes its own child
-   * result.
+   * Verify the genesis and every transfer in this token using the default
+   * {@link TokenVerifier}. Kept for convenience and backwards compatibility; the
+   * verification logic itself lives in {@link TokenVerifier} and can be swapped
+   * for a platform-specific {@link ITokenVerifier}.
    *
    * @param {IVerificationContext} verificationContext Shared verification context (trust base + registries).
    * @returns {Promise<VerificationResult<VerificationStatus>>} Aggregated verification result.
    */
-  public async verify(verificationContext: IVerificationContext): Promise<VerificationResult<VerificationStatus>> {
-    const pending: Token[] = [this];
-    const collectNestedToken = (token: Token): void => {
-      pending.push(token);
-    };
-
-    const results: VerificationResult<unknown>[] = [];
-    for (let tokenIndex = 0; tokenIndex < pending.length; tokenIndex++) {
-      const token = pending[tokenIndex];
-      const rule = `Token[${tokenIndex}:${token.id.toString()}]`;
-
-      const tokenResults: VerificationResult<unknown>[] = [];
-      const result = await CertifiedMintTransactionVerificationRule.verify(
-        token.genesis,
-        verificationContext,
-        collectNestedToken,
-      );
-      tokenResults.push(result);
-      if (result.status !== VerificationStatus.OK) {
-        results.push(
-          new VerificationResult(rule, VerificationStatus.FAIL, 'Genesis verification failed', tokenResults),
-        );
-        return new VerificationResult(
-          'TokenVerification',
-          VerificationStatus.FAIL,
-          `${rule} verification failed`,
-          results,
-        );
-      }
-
-      const transferResults: VerificationResult<VerificationStatus>[] = [];
-      for (let i = 0; i < token._transactions.length; i++) {
-        const transaction = token._transactions[i];
-        const transferResult = await CertifiedTransferTransactionVerificationRule.verify(
-          transaction,
-          verificationContext,
-        );
-        transferResults.push(transferResult);
-
-        if (transferResult.status !== VerificationStatus.OK) {
-          tokenResults.push(
-            new VerificationResult('TokenTransferVerification', VerificationStatus.FAIL, '', transferResults),
-          );
-          results.push(
-            new VerificationResult(
-              rule,
-              VerificationStatus.FAIL,
-              `Transaction[${i}] verification failed`,
-              tokenResults,
-            ),
-          );
-
-          return new VerificationResult(
-            'TokenVerification',
-            VerificationStatus.FAIL,
-            `${rule} verification failed`,
-            results,
-          );
-        }
-      }
-
-      tokenResults.push(
-        new VerificationResult('TokenTransferVerification', VerificationStatus.OK, '', transferResults),
-      );
-      results.push(new VerificationResult(rule, VerificationStatus.OK, '', tokenResults));
-    }
-
-    return new VerificationResult('TokenVerification', VerificationStatus.OK, '', results);
+  public verify(verificationContext: IVerificationContext): Promise<VerificationResult<VerificationStatus>> {
+    return new TokenVerifier().verify(this, verificationContext);
   }
 }

@@ -75,6 +75,17 @@ export class RootTrustBaseNodeInfo {
   }
 
   /**
+   * @returns {INodeInfoJson} JSON representation of the node info.
+   */
+  public toJSON(): INodeInfoJson {
+    return {
+      nodeId: this.nodeId,
+      sigKey: HexConverter.encode(this._signingKey),
+      stake: this.stakedAmount.toString(),
+    };
+  }
+
+  /**
    * @returns {string} String representation of the node info.
    */
   public toString(): string {
@@ -249,6 +260,26 @@ export class RootTrustBase {
       typeof input.signatures == 'object' &&
       input.signatures !== null
     );
+  }
+
+  /**
+   * @returns {IRootTrustBaseJson} JSON representation of the trust base (mirrors {@link fromJSON}).
+   */
+  public toJSON(): IRootTrustBaseJson {
+    return {
+      changeRecordHash: this._changeRecordHash ? HexConverter.encode(this._changeRecordHash) : null,
+      epoch: this.epoch.toString(),
+      epochStartRound: this.epochStartRound.toString(),
+      networkId: this.networkId.id,
+      previousEntryHash: this._previousEntryHash ? HexConverter.encode(this._previousEntryHash) : null,
+      quorumThreshold: this.quorumThreshold.toString(),
+      rootNodes: Array.from(this._rootNodes.values()).map((node) => node.toJSON()),
+      signatures: Object.fromEntries(
+        Array.from(this._signatures.entries()).map(([id, signature]) => [id, HexConverter.encode(signature)]),
+      ),
+      stateHash: HexConverter.encode(this._stateHash),
+      version: this.version.toString(),
+    };
   }
 
   /**
