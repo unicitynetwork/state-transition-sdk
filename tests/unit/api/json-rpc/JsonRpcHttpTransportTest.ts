@@ -49,6 +49,28 @@ describe('JsonRpcHttpTransport', () => {
     await expect(transport.request('m', {})).rejects.toThrow('boom');
   });
 
+  it('should forward the abort signal to fetch', async () => {
+    respondWith((id) => ({ id, jsonrpc: '2.0', result: 'ok' }));
+    const controller = new AbortController();
+
+    await expect(transport.request('m', {}, new Headers(), { signal: controller.signal })).resolves.toBe('ok');
+    expect(fetchMock.mock.calls[0][1]?.signal).toBe(controller.signal);
+  });
+
+  it('should reject once the request is aborted', async () => {
+    fetchMock.mockImplementation((_input, init) => {
+      const { signal } = init ?? {};
+      return new Promise<Response>((_resolve, reject) => {
+        signal?.addEventListener('abort', () => reject(signal.reason as Error), { once: true });
+      });
+    });
+    const controller = new AbortController();
+    const request = transport.request('m', {}, new Headers(), { signal: controller.signal });
+    controller.abort(new Error('aborted by caller'));
+
+    await expect(request).rejects.toThrow('aborted by caller');
+  });
+
   it('should decode a multi-byte UTF-8 character split across stream chunks', async () => {
     fetchMock.mockImplementation((_input, init) => {
       const id = (JSON.parse((init?.body as string) ?? '{}') as { id: unknown }).id;
