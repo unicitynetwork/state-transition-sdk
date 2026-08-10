@@ -4,6 +4,7 @@ import { CertificationRequest } from '../../src/api/CertificationRequest.js';
 import { CertificationResponse } from '../../src/api/CertificationResponse.js';
 import { IAggregatorClient } from '../../src/api/IAggregatorClient.js';
 import { InclusionProofResponse } from '../../src/api/InclusionProofResponse.js';
+import { IRequestOptions } from '../../src/api/IRequestOptions.js';
 import { JsonRpcHttpTransport } from '../../src/api/json-rpc/JsonRpcHttpTransport.js';
 import { StateId } from '../../src/api/StateId.js';
 import { HexConverter } from '../../src/util/HexConverter.js';
@@ -23,11 +24,11 @@ export class ShardAggregatorClient implements IAggregatorClient {
       .map(([shardId, url]) => [shardId, new JsonRpcHttpTransport(url)]);
   }
 
-  public async getInclusionProof(stateId: StateId): Promise<InclusionProofResponse> {
+  public async getInclusionProof(stateId: StateId, options?: IRequestOptions): Promise<InclusionProofResponse> {
     const transport = this.getTransport(stateId);
     const data = { stateId: HexConverter.encode(stateId.data) };
     return InclusionProofResponse.fromCBOR(
-      HexConverter.decode((await transport.request('get_inclusion_proof.v2', data)) as string),
+      HexConverter.decode((await transport.request('get_inclusion_proof.v2', data, new Headers(), options)) as string),
     );
   }
 

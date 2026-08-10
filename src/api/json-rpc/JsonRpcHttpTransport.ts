@@ -4,6 +4,7 @@ import { IJsonRpcResponse } from './IJsonRpcResponse.js';
 import { JsonRpcDataError } from './JsonRpcDataError.js';
 import { JsonRpcNetworkError } from './JsonRpcNetworkError.js';
 import { JsonRpcResponseError } from './JsonRpcResponseError.js';
+import { IRequestOptions } from '../IRequestOptions.js';
 
 /**
  * JSON-RPC HTTP service.
@@ -67,12 +68,18 @@ export class JsonRpcHttpTransport {
    * @param {string} method JSON-RPC method.
    * @param {unknown} params JSON-RPC params.
    * @param {Headers} headers Optional request headers.
+   * @param {IRequestOptions} options Optional per-request options, e.g. an abort signal.
    * @returns {Promise<unknown>} The response result.
    * @throws {JsonRpcNetworkError} On a non-success HTTP status.
    * @throws {JsonRpcDataError} When the response carries a JSON-RPC error object.
    * @throws {JsonRpcResponseError} When the response is malformed (version, id, exclusivity, size).
    */
-  public async request(method: string, params: unknown, headers = new Headers()): Promise<unknown> {
+  public async request(
+    method: string,
+    params: unknown,
+    headers = new Headers(),
+    options?: IRequestOptions,
+  ): Promise<unknown> {
     headers.set('Content-Type', 'application/json');
 
     const id = uuid();
@@ -86,6 +93,7 @@ export class JsonRpcHttpTransport {
       headers,
       method: 'POST',
       redirect: 'error',
+      signal: options?.signal,
     });
 
     const body = await JsonRpcHttpTransport.readBoundedText(response, this.maxResponseBytes);

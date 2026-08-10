@@ -3,6 +3,7 @@ import { CertificationRequest } from './CertificationRequest.js';
 import { CertificationResponse } from './CertificationResponse.js';
 import { IAggregatorClient } from './IAggregatorClient.js';
 import { InclusionProofResponse } from './InclusionProofResponse.js';
+import { IRequestOptions } from './IRequestOptions.js';
 import { JsonRpcHttpTransport } from './json-rpc/JsonRpcHttpTransport.js';
 import { StateId } from './StateId.js';
 import { HexConverter } from '../util/HexConverter.js';
@@ -35,10 +36,12 @@ export class AggregatorClient implements IAggregatorClient {
   /**
    * @inheritDoc
    */
-  public async getInclusionProof(stateId: StateId): Promise<InclusionProofResponse> {
+  public async getInclusionProof(stateId: StateId, options?: IRequestOptions): Promise<InclusionProofResponse> {
     const data = { stateId: HexConverter.encode(stateId.data) };
     return InclusionProofResponse.fromCBOR(
-      HexConverter.decode((await this.transport.request('get_inclusion_proof.v2', data)) as string),
+      HexConverter.decode(
+        (await this.transport.request('get_inclusion_proof.v2', data, new Headers(), options)) as string,
+      ),
     );
   }
 
@@ -66,7 +69,10 @@ export class AggregatorClient implements IAggregatorClient {
   /**
    * @inheritDoc
    */
-  public async submitCertificationRequest(certificationData: CertificationData): Promise<CertificationResponse> {
+  public async submitCertificationRequest(
+    certificationData: CertificationData,
+    options?: IRequestOptions,
+  ): Promise<CertificationResponse> {
     const request = await CertificationRequest.create(certificationData);
 
     const headers = new Headers([['X-State-ID', HexConverter.encode(request.stateId.data)]]);
@@ -78,6 +84,7 @@ export class AggregatorClient implements IAggregatorClient {
       'certification_request',
       HexConverter.encode(request.toCBOR()),
       headers,
+      options,
     );
 
     return CertificationResponse.fromJSON(response);

@@ -115,9 +115,18 @@ Run the example flows (requires a reachable aggregator; URL is read from each ex
 npm run test:examples
 ```
 
-Run the end-to-end suite (expects a local aggregator at `http://localhost:3000` — see [`tests/e2e/E2ETransitionFlowTest.ts`](./tests/e2e/E2ETransitionFlowTest.ts)):
+Run the end-to-end suite (defaults to a local aggregator at `http://localhost:3000`):
 
 ```bash
+npm run test:e2e
+```
+
+To run it against another network, point it at that endpoint and supply the matching trust base:
+
+```bash
+AGGREGATOR_URL=https://gateway.example.unicity.network \
+TRUST_BASE_PATH=/path/to/trust-base.json \
+AGGREGATOR_API_KEY=<key, if the endpoint requires one> \
 npm run test:e2e
 ```
 
@@ -135,8 +144,13 @@ npm run lint:fix
 
 ## Network Configuration
 
-- **Test Gateway**: `https://gateway-test.unicity.network`
-- **Network identifiers**: `NetworkId.MAINNET`, `NetworkId.TESTNET`, `NetworkId.LOCAL`
+- **Test gateway**: `https://gateway.testnet2.unicity.network`. It fronts a sharded aggregator, so a
+  plain `AggregatorClient` pointed at that one URL is enough. `certification_request` requires an API
+  key (`AggregatorClient`'s second argument); reading inclusion proofs does not.
+- **Trust base**: network-specific, and the network the SDK mints on is taken from it
+  (`trustBase.networkId`), so the trust base and the gateway must belong to the same network.
+- **Network identifiers**: `NetworkId.MAINNET`, `NetworkId.TESTNET` and `NetworkId.LOCAL` are the
+  named constants; any other id a trust base carries resolves through `NetworkId.fromId()`.
 - **Token type**: caller-supplied; use `TokenType.generate()` or construct from explicit bytes
 
 ## Unicity Signature Standard
@@ -171,7 +185,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 - **Repository**: [GitHub](https://github.com/unicitynetwork/state-transition-sdk-js)
 - **Issues**: [GitHub Issues](https://github.com/unicitynetwork/state-transition-sdk-js/issues)
-- **Gateway API**: `https://gateway-test.unicity.network`
+- **Gateway API**: `https://gateway.testnet2.unicity.network`
 
 ---
 
