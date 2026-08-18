@@ -3,6 +3,7 @@ import { DataHasher } from '../../../../crypto/hash/DataHasher.js';
 import { HashAlgorithm } from '../../../../crypto/hash/HashAlgorithm.js';
 import { ISignatureVerifier } from '../../../../crypto/ISignatureVerifier.js';
 import { Signature } from '../../../../crypto/secp256k1/Signature.js';
+import { CborSerializer } from '../../../../serialization/cbor/CborSerializer.js';
 import { HexConverter } from '../../../../util/HexConverter.js';
 import { VerificationResult } from '../../../../verification/VerificationResult.js';
 import { VerificationStatus } from '../../../../verification/VerificationStatus.js';
@@ -46,19 +47,25 @@ export class UnicitySealQuorumSignaturesVerificationRule {
    * The signature verifier needs no representation here: a cache is reachable
    * only through the rule that owns it, and a rule owns exactly one verifier.
    *
+   * Both are folded into a single digest through a CBOR array: the framing is
+   * what makes one hash safe, since concatenating two variable-length encodings
+   * raw would let a different (trust base, seal) split produce the same bytes.
+   *
    * @param {RootTrustBase} trustBase Trust base the seal is verified against.
    * @param {UnicitySeal} unicitySeal Seal being verified.
    * @returns {Promise<string>} Cache key.
    */
   private static async cacheKeyFor(trustBase: RootTrustBase, unicitySeal: UnicitySeal): Promise<string> {
-    const [trustBaseHash, sealHash] = await Promise.all([
-      new DataHasher(HashAlgorithm.SHA256)
-        .update(new TextEncoder().encode(JSON.stringify(trustBase.toJSON())))
-        .digest(),
-      new DataHasher(HashAlgorithm.SHA256).update(unicitySeal.toCBOR()).digest(),
-    ]);
+    const hash = await new DataHasher(HashAlgorithm.SHA256)
+      .update(
+        CborSerializer.encodeArray(
+          CborSerializer.encodeTextString(JSON.stringify(trustBase.toJSON())),
+          CborSerializer.encodeByteString(unicitySeal.toCBOR()),
+        ),
+      )
+      .digest();
 
-    return `${HexConverter.encode(trustBaseHash.imprint)}:${HexConverter.encode(sealHash.imprint)}`;
+    return HexConverter.encode(hash.imprint);
   }
 
   /**
