@@ -1,4 +1,5 @@
 import { DataHash } from '../../crypto/hash/DataHash.js';
+import { Secp256k1SignatureVerifier } from '../../crypto/secp256k1/Secp256k1SignatureVerifier.js';
 import { CborDeserializer } from '../../serialization/cbor/CborDeserializer.js';
 import { VerificationResult } from '../../verification/VerificationResult.js';
 import { VerificationStatus } from '../../verification/VerificationStatus.js';
@@ -32,12 +33,15 @@ export class DefaultBuiltInPredicateVerifier implements IPredicateVerifier {
   }
 
   /**
-   * Create a verifier preloaded with the default built-in predicate verifiers.
+   * Create a verifier preloaded with the default built-in predicate verifiers,
+   * wired to secp256k1. To use a different signature verifier, compose the
+   * registry directly:
+   * `new DefaultBuiltInPredicateVerifier([new SignaturePredicateVerifier(myVerifier)])`.
    *
    * @returns {DefaultBuiltInPredicateVerifier} New verifier.
    */
   public static create(): DefaultBuiltInPredicateVerifier {
-    return new DefaultBuiltInPredicateVerifier([new SignaturePredicateVerifier()]);
+    return new DefaultBuiltInPredicateVerifier([new SignaturePredicateVerifier(new Secp256k1SignatureVerifier())]);
   }
 
   /**

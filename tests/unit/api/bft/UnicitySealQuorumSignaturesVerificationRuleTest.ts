@@ -1,6 +1,7 @@
 import { UnicitySeal } from '../../../../src/api/bft/UnicitySeal.js';
 import { UnicitySealQuorumSignaturesVerificationRule } from '../../../../src/api/bft/verification/rule/UnicitySealQuorumSignaturesVerificationRule.js';
 import { NetworkId } from '../../../../src/api/NetworkId.js';
+import { Secp256k1SignatureVerifier } from '../../../../src/crypto/secp256k1/Secp256k1SignatureVerifier.js';
 import { SigningService } from '../../../../src/crypto/secp256k1/SigningService.js';
 import { VerificationStatus } from '../../../../src/verification/VerificationStatus.js';
 import { createRootTrustBase } from '../../../utils/RootTrustBaseFixture.js';
@@ -20,25 +21,25 @@ describe('UnicitySealQuorumSignaturesVerificationRule', () => {
   const rootNode = signingServiceFrom(0x01);
   const impostor = signingServiceFrom(0x02);
 
+  let signatureVerifier: Secp256k1SignatureVerifier;
   let verifySpy: jest.SpyInstance;
 
   beforeEach(() => {
-    verifySpy = jest.spyOn(SigningService, 'verifyWithPublicKey');
-  });
-
-  afterEach(() => {
-    verifySpy.mockRestore();
+    // A fresh verifier per test: the memo is keyed on the verifier instance, so
+    // this isolates each test from the others' cached verdicts.
+    signatureVerifier = new Secp256k1SignatureVerifier();
+    verifySpy = jest.spyOn(signatureVerifier, 'verify');
   });
 
   it('verifies a quorum seal, then serves the repeat from the memo', async () => {
     const trustBase = createRootTrustBase(rootNode.publicKey);
     const seal = await sealSignedBy(rootNode);
 
-    const first = await UnicitySealQuorumSignaturesVerificationRule.verify(trustBase, seal);
+    const first = await UnicitySealQuorumSignaturesVerificationRule.verify(trustBase, signatureVerifier, seal);
     expect(first.status).toEqual(VerificationStatus.OK);
     expect(verifySpy).toHaveBeenCalledTimes(1);
 
-    const second = await UnicitySealQuorumSignaturesVerificationRule.verify(trustBase, seal);
+    const second = await UnicitySealQuorumSignaturesVerificationRule.verify(trustBase, signatureVerifier, seal);
     expect(second.status).toEqual(VerificationStatus.OK);
     expect(verifySpy).toHaveBeenCalledTimes(1);
   });
@@ -56,41 +57,63 @@ describe('UnicitySealQuorumSignaturesVerificationRule', () => {
     // The trap: identical bodies, hence identical signature-excluding hashes.
     expect((await forged.calculateHash()).toString()).toEqual((await genuine.calculateHash()).toString());
 
-    expect((await UnicitySealQuorumSignaturesVerificationRule.verify(trustBase, genuine)).status).toEqual(
-      VerificationStatus.OK,
-    );
+    expect(
+      (await UnicitySealQuorumSignaturesVerificationRule.verify(trustBase, signatureVerifier, genuine)).status,
+    ).toEqual(VerificationStatus.OK);
 
-    const result = await UnicitySealQuorumSignaturesVerificationRule.verify(trustBase, forged);
+    const result = await UnicitySealQuorumSignaturesVerificationRule.verify(trustBase, signatureVerifier, forged);
     expect(result.status).toEqual(VerificationStatus.FAIL);
   });
 
-  it('does not memoise across trust bases, since the outcome depends on the root nodes', async () => {
+  // The trust base is keyed by content, not identity: `_rootNodes` is an
+  // exposed Map and `readonly` stops only reassignment, so an in-place edit of
+  // the root keys must invalidate the memo rather than keep hitting a verdict
+  // computed under the old ones.
+  it('re-verifies after the trust base is mutated in place', async () => {
+    const trustBase = createRootTrustBase(rootNode.publicKey);
     const seal = await sealSignedBy(rootNode);
 
-    await UnicitySealQuorumSignaturesVerificationRule.verify(createRootTrustBase(rootNode.publicKey), seal);
+    expect(
+      (await UnicitySealQuorumSignaturesVerificationRule.verify(trustBase, signatureVerifier, seal)).status,
+    ).toEqual(VerificationStatus.OK);
     expect(verifySpy).toHaveBeenCalledTimes(1);
 
-    // A different trust base instance must re-verify rather than inherit the memo.
-    const other = await UnicitySealQuorumSignaturesVerificationRule.verify(
-      createRootTrustBase(rootNode.publicKey),
-      seal,
-    );
-    expect(other.status).toEqual(VerificationStatus.OK);
+    // Swap the root node's key for one that did not sign this seal, mutating
+    // the exposed Map in place exactly as an application could.
+    trustBase._rootNodes.set('NODE', createRootTrustBase(impostor.publicKey)._rootNodes.get('NODE')!);
+
+    const result = await UnicitySealQuorumSignaturesVerificationRule.verify(trustBase, signatureVerifier, seal);
+    expect(result.status).toEqual(VerificationStatus.FAIL);
     expect(verifySpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not memoise across signature verifiers, which need not agree', async () => {
+    const trustBase = createRootTrustBase(rootNode.publicKey);
+    const seal = await sealSignedBy(rootNode);
+
+    await UnicitySealQuorumSignaturesVerificationRule.verify(trustBase, signatureVerifier, seal);
+    expect(verifySpy).toHaveBeenCalledTimes(1);
+
+    const other = new Secp256k1SignatureVerifier();
+    const otherSpy = jest.spyOn(other, 'verify');
+    const result = await UnicitySealQuorumSignaturesVerificationRule.verify(trustBase, other, seal);
+
+    expect(result.status).toEqual(VerificationStatus.OK);
+    expect(otherSpy).toHaveBeenCalledTimes(1);
   });
 
   it('does not memoise a seal that fails to reach quorum', async () => {
     const trustBase = createRootTrustBase(rootNode.publicKey);
     const seal = await sealSignedBy(impostor);
 
-    expect((await UnicitySealQuorumSignaturesVerificationRule.verify(trustBase, seal)).status).toEqual(
-      VerificationStatus.FAIL,
-    );
+    expect(
+      (await UnicitySealQuorumSignaturesVerificationRule.verify(trustBase, signatureVerifier, seal)).status,
+    ).toEqual(VerificationStatus.FAIL);
     expect(verifySpy).toHaveBeenCalledTimes(1);
 
-    expect((await UnicitySealQuorumSignaturesVerificationRule.verify(trustBase, seal)).status).toEqual(
-      VerificationStatus.FAIL,
-    );
+    expect(
+      (await UnicitySealQuorumSignaturesVerificationRule.verify(trustBase, signatureVerifier, seal)).status,
+    ).toEqual(VerificationStatus.FAIL);
     expect(verifySpy).toHaveBeenCalledTimes(2);
   });
 });

@@ -23,6 +23,7 @@ export class CertifiedTransferTransactionVerificationRule {
     const result: VerificationResult<unknown> = await InclusionProofVerificationRule.verify(
       verificationContext.trustBase,
       verificationContext.predicateVerifier,
+      verificationContext.unicityCertificateVerifier,
       transaction.inclusionProof,
       await transaction.calculateTransactionHash(),
       transaction.lockScript,

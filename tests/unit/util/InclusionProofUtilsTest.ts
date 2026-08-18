@@ -1,5 +1,6 @@
 import { getEventListeners } from 'node:events';
 
+import { UnicityCertificateVerifier } from '../../../src/api/bft/verification/UnicityCertificateVerifier.js';
 import { CertificationResponse } from '../../../src/api/CertificationResponse.js';
 import { IAggregatorClient } from '../../../src/api/IAggregatorClient.js';
 import { InclusionProof } from '../../../src/api/InclusionProof.js';
@@ -10,6 +11,7 @@ import { NetworkId } from '../../../src/api/NetworkId.js';
 import { StateId } from '../../../src/api/StateId.js';
 import { DataHash } from '../../../src/crypto/hash/DataHash.js';
 import { HashAlgorithm } from '../../../src/crypto/hash/HashAlgorithm.js';
+import { Secp256k1SignatureVerifier } from '../../../src/crypto/secp256k1/Secp256k1SignatureVerifier.js';
 import { SigningService } from '../../../src/crypto/secp256k1/SigningService.js';
 import { SignaturePredicate } from '../../../src/predicate/builtin/SignaturePredicate.js';
 import { PredicateVerifierService } from '../../../src/predicate/verification/PredicateVerifierService.js';
@@ -64,6 +66,7 @@ describe('waitInclusionProof', () => {
   const signingService = SigningService.generate();
   const trustBase = createRootTrustBase(signingService.publicKey);
   const predicateVerifier = PredicateVerifierService.create();
+  const unicityCertificateVerifier = new UnicityCertificateVerifier(new Secp256k1SignatureVerifier());
 
   let transaction: MintTransaction;
   let pendingProof: InclusionProof;
@@ -91,6 +94,7 @@ describe('waitInclusionProof', () => {
       new StateTransitionClient(aggregatorClient),
       trustBase,
       predicateVerifier,
+      unicityCertificateVerifier,
       transaction,
       signal,
       interval,

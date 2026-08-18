@@ -1,8 +1,10 @@
 import config from './config.json' with { type: 'json' };
 import { AggregatorClient } from '../../../src/api/AggregatorClient.js';
 import { RootTrustBase } from '../../../src/api/bft/RootTrustBase.js';
+import { UnicityCertificateVerifier } from '../../../src/api/bft/verification/UnicityCertificateVerifier.js';
 import { CertificationData } from '../../../src/api/CertificationData.js';
 import { NetworkId } from '../../../src/api/NetworkId.js';
+import { Secp256k1SignatureVerifier } from '../../../src/crypto/secp256k1/Secp256k1SignatureVerifier.js';
 import { SigningService } from '../../../src/crypto/secp256k1/SigningService.js';
 import { SignaturePredicate } from '../../../src/predicate/builtin/SignaturePredicate.js';
 import { PredicateVerifierService } from '../../../src/predicate/verification/PredicateVerifierService.js';
@@ -25,9 +27,11 @@ it('Token minting', async () => {
   const client = new StateTransitionClient(aggregatorClient);
 
   const predicateVerifier = PredicateVerifierService.create();
+  const unicityCertificateVerifier = new UnicityCertificateVerifier(new Secp256k1SignatureVerifier());
   const verificationContext = new VerificationContext(
     trustBase,
     predicateVerifier,
+    unicityCertificateVerifier,
     new MintJustificationVerifierService(),
     new TokenIssuanceVerifierService(false),
   );
@@ -50,7 +54,8 @@ it('Token minting', async () => {
     await mintTransaction.toCertifiedTransaction(
       trustBase,
       predicateVerifier,
-      await waitInclusionProof(client, trustBase, predicateVerifier, mintTransaction),
+      unicityCertificateVerifier,
+      await waitInclusionProof(client, trustBase, predicateVerifier, unicityCertificateVerifier, mintTransaction),
     ),
     verificationContext,
   );

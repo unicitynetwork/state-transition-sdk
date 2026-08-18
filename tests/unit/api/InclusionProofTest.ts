@@ -1,5 +1,6 @@
 import { RootTrustBase } from '../../../src/api/bft/RootTrustBase.js';
 import { UnicityCertificate } from '../../../src/api/bft/UnicityCertificate.js';
+import { UnicityCertificateVerifier } from '../../../src/api/bft/verification/UnicityCertificateVerifier.js';
 import { CertificationData } from '../../../src/api/CertificationData.js';
 import { InclusionCertificate } from '../../../src/api/InclusionCertificate.js';
 import { InclusionProof } from '../../../src/api/InclusionProof.js';
@@ -9,6 +10,7 @@ import { DataHash } from '../../../src/crypto/hash/DataHash.js';
 import { DataHasherFactory } from '../../../src/crypto/hash/DataHasherFactory.js';
 import { HashAlgorithm } from '../../../src/crypto/hash/HashAlgorithm.js';
 import { NodeDataHasher } from '../../../src/crypto/hash/NodeDataHasher.js';
+import { Secp256k1SignatureVerifier } from '../../../src/crypto/secp256k1/Secp256k1SignatureVerifier.js';
 import { SigningService } from '../../../src/crypto/secp256k1/SigningService.js';
 import { SignaturePredicate } from '../../../src/predicate/builtin/SignaturePredicate.js';
 import { EncodedPredicate } from '../../../src/predicate/EncodedPredicate.js';
@@ -30,6 +32,7 @@ describe('InclusionProof', () => {
   );
 
   let predicateVerifier: PredicateVerifierService;
+  let unicityCertificateVerifier: UnicityCertificateVerifier;
   let transaction: MintTransaction;
   let certificationData: CertificationData;
   let inclusionCertificate: InclusionCertificate;
@@ -51,6 +54,7 @@ describe('InclusionProof', () => {
     unicityCertificate = await createUnicityCertificate(root.hash, signingService);
     trustBase = createRootTrustBase(signingService.publicKey);
     predicateVerifier = PredicateVerifierService.create();
+    unicityCertificateVerifier = new UnicityCertificateVerifier(new Secp256k1SignatureVerifier());
   });
 
   it('should encode and decode cbor', () => {
@@ -73,6 +77,7 @@ describe('InclusionProof', () => {
       InclusionProofVerificationRule.verify(
         trustBase,
         predicateVerifier,
+        unicityCertificateVerifier,
         new InclusionProof(certificationData, inclusionCertificate, unicityCertificate),
         transactionHash,
         transaction.lockScript,
@@ -84,6 +89,7 @@ describe('InclusionProof', () => {
       InclusionProofVerificationRule.verify(
         trustBase,
         predicateVerifier,
+        unicityCertificateVerifier,
         new InclusionProof(certificationData, null, unicityCertificate),
         transactionHash,
         transaction.lockScript,
@@ -117,6 +123,7 @@ describe('InclusionProof', () => {
       InclusionProofVerificationRule.verify(
         trustBase,
         predicateVerifier,
+        unicityCertificateVerifier,
         invalidTransactionHashInclusionProof,
         await transaction.calculateTransactionHash(),
         transaction.lockScript,
@@ -147,6 +154,7 @@ describe('InclusionProof', () => {
       InclusionProofVerificationRule.verify(
         trustBase,
         predicateVerifier,
+        unicityCertificateVerifier,
         inclusionProof,
         await transaction.calculateTransactionHash(),
         transaction.lockScript,
@@ -162,6 +170,7 @@ describe('InclusionProof', () => {
       InclusionProofVerificationRule.verify(
         createRootTrustBase(HexConverter.decode('0000000000000000000000000000000000000000000000000000000000000001')),
         predicateVerifier,
+        unicityCertificateVerifier,
         inclusionProof,
         await transaction.calculateTransactionHash(),
         transaction.lockScript,

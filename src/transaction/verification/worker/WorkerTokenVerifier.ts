@@ -2,6 +2,7 @@ import { ITokenVerifier } from '../ITokenVerifier.js';
 import { IVerificationContext } from '../IVerificationContext.js';
 import { IWorker } from './IWorker.js';
 import { RootTrustBase } from '../../../api/bft/RootTrustBase.js';
+import { UnicityCertificateVerifier } from '../../../api/bft/verification/UnicityCertificateVerifier.js';
 import { InclusionProof } from '../../../api/InclusionProof.js';
 import { DataHash } from '../../../crypto/hash/DataHash.js';
 import { DataHasher } from '../../../crypto/hash/DataHasher.js';
@@ -188,16 +189,19 @@ class WorkerTransferTransaction {
    *
    * @param {RootTrustBase} trustBase Root trust base.
    * @param {PredicateVerifierService} predicateVerifier Predicate verifier.
+   * @param {UnicityCertificateVerifier} unicityCertificateVerifier Unicity certificate verifier.
    * @returns {Promise<VerificationResult<VerificationStatus>>} Verification outcome.
    */
   public async verify(
     trustBase: RootTrustBase,
     predicateVerifier: PredicateVerifierService,
+    unicityCertificateVerifier: UnicityCertificateVerifier,
   ): Promise<VerificationResult<VerificationStatus>> {
     const results: VerificationResult<unknown>[] = [];
     const result = await InclusionProofVerificationRule.verify(
       trustBase,
       predicateVerifier,
+      unicityCertificateVerifier,
       this.inclusionProof,
       await this.calculateTransactionHash(),
       this.lockScript,
@@ -237,6 +241,16 @@ export abstract class TransferTransactionVerifier {
   protected abstract get predicateVerifier(): PredicateVerifierService;
 
   /**
+   * Unicity certificate verifier for worker-side inclusion-proof checks.
+   *
+   * Verifier instances cannot cross the worker boundary, so each side builds
+   * its own; this one MUST be equivalent to the one in the main-thread
+   * verification context. If they differ, worker-verified transfers and the
+   * main-thread-verified genesis are judged under different rules.
+   */
+  protected abstract get unicityCertificateVerifier(): UnicityCertificateVerifier;
+
+  /**
    * Verify every transfer in the request against the trust base shipped with it.
    *
    * @param {ITransferTransactionVerificationRequest} request The batch to verify.
@@ -251,7 +265,7 @@ export abstract class TransferTransactionVerifier {
       const results: ITransferTransactionVerificationResult[] = [];
       for (const transfer of request.transfers) {
         const transaction = WorkerTransferTransaction.fromCBOR(transfer.bytes);
-        const result = await transaction.verify(trustBase, this.predicateVerifier);
+        const result = await transaction.verify(trustBase, this.predicateVerifier, this.unicityCertificateVerifier);
         results.push({ index: transfer.index, message: result.message, status: result.status });
       }
 

@@ -1,7 +1,8 @@
 import { DataHash } from '../../../crypto/hash/DataHash.js';
 import { DataHasher } from '../../../crypto/hash/DataHasher.js';
 import { HashAlgorithm } from '../../../crypto/hash/HashAlgorithm.js';
-import { SigningService } from '../../../crypto/secp256k1/SigningService.js';
+import { ISignatureVerifier } from '../../../crypto/ISignatureVerifier.js';
+import { Signature } from '../../../crypto/secp256k1/Signature.js';
 import { CborSerializer } from '../../../serialization/cbor/CborSerializer.js';
 import { VerificationResult } from '../../../verification/VerificationResult.js';
 import { VerificationStatus } from '../../../verification/VerificationStatus.js';
@@ -13,11 +14,16 @@ import { SignaturePredicateUnlockScript } from '../SignaturePredicateUnlockScrip
 
 /**
  * Verifier for {@link SignaturePredicate}: recomputes the
- * (sourceStateHash, transactionHash) digest and checks the secp256k1
- * signature in the unlock script against the predicate's public key.
+ * (sourceStateHash, transactionHash) digest and checks the signature in the
+ * unlock script against the predicate's public key.
  */
 export class SignaturePredicateVerifier implements IBuiltInPredicateVerifier {
   public readonly type = BuiltInPredicateType.Signature;
+
+  /**
+   * @param {ISignatureVerifier<Signature>} signatureVerifier Verifier for unlock-script signatures.
+   */
+  public constructor(private readonly signatureVerifier: ISignatureVerifier<Signature>) {}
 
   /**
    * @inheritDoc
@@ -31,7 +37,7 @@ export class SignaturePredicateVerifier implements IBuiltInPredicateVerifier {
     const predicate = SignaturePredicate.fromPredicate(encodedPredicate);
     const unlockScript = SignaturePredicateUnlockScript.decode(unlockScriptBytes);
 
-    const result = await SigningService.verifyWithPublicKey(
+    const result = await this.signatureVerifier.verify(
       await new DataHasher(HashAlgorithm.SHA256)
         .update(
           CborSerializer.encodeArray(

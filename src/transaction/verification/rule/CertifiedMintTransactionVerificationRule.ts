@@ -59,6 +59,7 @@ export class CertifiedMintTransactionVerificationRule {
     result = await InclusionProofVerificationRule.verify(
       verificationContext.trustBase,
       verificationContext.predicateVerifier,
+      verificationContext.unicityCertificateVerifier,
       genesis.inclusionProof,
       await genesis.calculateTransactionHash(),
       genesis.lockScript,

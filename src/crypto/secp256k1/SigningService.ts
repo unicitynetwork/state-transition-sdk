@@ -1,18 +1,23 @@
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 
+import { Secp256k1SignatureVerifier } from './Secp256k1SignatureVerifier.js';
 import { ISigningService } from '../ISigningService.js';
 import { Signature } from './Signature.js';
-import { areUint8ArraysEqual } from '../../util/TypedArrayUtils.js';
 import { DataHash } from '../hash/DataHash.js';
 
 /**
  * Default secp256k1 signing service. Wraps a 32-byte private key and exposes
- * the matching compressed public key, plus helpers for sign/verify and for
- * recovering a public key from a signature.
+ * the matching compressed public key, plus helpers for sign/verify.
+ *
+ * Verification is delegated to {@link Secp256k1SignatureVerifier}: signing
+ * depends on verification, never the reverse.
  *
  * @implements {ISigningService}
  */
 export class SigningService implements ISigningService<Signature> {
+  /** Stateless, so one shared instance serves every caller. */
+  private static readonly SIGNATURE_VERIFIER = new Secp256k1SignatureVerifier();
+
   private readonly _publicKey: Uint8Array;
 
   public constructor(private readonly privateKey: Uint8Array) {
@@ -88,64 +93,7 @@ export class SigningService implements ISigningService<Signature> {
    *   recovered public key matches `publicKey`.
    */
   public static verifyWithPublicKey(hash: DataHash, signature: Signature, publicKey: Uint8Array): Promise<boolean> {
-    const recovered = SigningService.recoverSignature(hash, signature);
-    if (recovered === null || recovered.hasHighS) {
-      return Promise.resolve(false);
-    }
-
-    return Promise.resolve(areUint8ArraysEqual(new Uint8Array(publicKey), recovered.publicKey));
-  }
-
-  /**
-   * Recover the public key from the signature's recovery byte and verify the
-   * signature against `hash`. The recovered key defines the signer's identity;
-   * no expected key is supplied.
-   *
-   * @param {DataHash} hash Hash that was signed.
-   * @param {Signature} signature Recoverable signature.
-   * @returns {Promise<boolean>} True if the signature verifies.
-   */
-  public static verifyWithRecoveredPublicKey(hash: DataHash, signature: Signature): Promise<boolean> {
-    const recovered = SigningService.recoverSignature(hash, signature);
-    if (recovered === null) {
-      return Promise.resolve(false);
-    }
-
-    return SigningService.verify(hash, signature.bytes, recovered.publicKey);
-  }
-
-  /**
-   * Recover the compressed public key that produced `signature` over `hash`,
-   * together with the signature's malleability flag, parsing the signature once.
-   *
-   * Key recovery is itself the validity check: the recovered key is by
-   * construction the only key under which `(r, s)` verifies for `hash`, so a
-   * caller that compares it against an expected key needs no second EC
-   * verification. `hasHighS` is returned alongside because recovery — unlike
-   * `secp256k1.verify`, which applies noble's default `lowS: true` policy —
-   * accepts malleable signatures, so callers relying on recovery alone must
-   * reject high-s themselves.
-   *
-   * @param {DataHash} hash Hash that was signed.
-   * @param {Signature} signature Recoverable signature.
-   * @returns {{ hasHighS: boolean; publicKey: Uint8Array }|null} Recovered public
-   *   key and malleability flag, or `null` if the signature is not recoverable
-   *   (e.g. `r`/`s` out of range).
-   */
-  private static recoverSignature(
-    hash: DataHash,
-    signature: Signature,
-  ): { hasHighS: boolean; publicKey: Uint8Array } | null {
-    try {
-      const recoverable = secp256k1.Signature.fromBytes(
-        new Uint8Array([signature.recovery, ...signature.bytes]),
-        'recovered',
-      );
-
-      return { hasHighS: recoverable.hasHighS(), publicKey: recoverable.recoverPublicKey(hash.data).toBytes() };
-    } catch {
-      return null;
-    }
+    return SigningService.SIGNATURE_VERIFIER.verify(hash, signature, publicKey);
   }
 
   /**

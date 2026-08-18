@@ -1,6 +1,6 @@
 import { ShardIdMatchesStateIdRule } from './ShardIdMatchesStateIdRule.js';
 import { RootTrustBase } from '../../../api/bft/RootTrustBase.js';
-import { UnicityCertificateVerification } from '../../../api/bft/verification/UnicityCertificateVerification.js';
+import { UnicityCertificateVerifier } from '../../../api/bft/verification/UnicityCertificateVerifier.js';
 import { InclusionProof } from '../../../api/InclusionProof.js';
 import { StateId } from '../../../api/StateId.js';
 import { DataHash } from '../../../crypto/hash/DataHash.js';
@@ -45,6 +45,7 @@ export class InclusionProofVerificationRule {
   public static async verify(
     trustBase: RootTrustBase,
     predicateVerifierFactory: PredicateVerifierService,
+    unicityCertificateVerifier: UnicityCertificateVerifier,
     inclusionProof: InclusionProof,
     transactionHash: DataHash,
     lockScript: EncodedPredicate,
@@ -105,7 +106,7 @@ export class InclusionProofVerificationRule {
       );
     }
 
-    const unicityCertificateVerificationResult = await UnicityCertificateVerification.verify(trustBase, inclusionProof);
+    const unicityCertificateVerificationResult = await unicityCertificateVerifier.verify(trustBase, inclusionProof);
 
     if (unicityCertificateVerificationResult.status !== VerificationStatus.OK) {
       return new VerificationResult(

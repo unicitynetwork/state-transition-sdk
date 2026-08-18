@@ -1,6 +1,7 @@
 import { MintJustificationVerifierService } from './MintJustificationVerifierService.js';
 import { TokenIssuanceVerifierService } from './TokenIssuanceVerifierService.js';
 import { RootTrustBase } from '../../api/bft/RootTrustBase.js';
+import { UnicityCertificateVerifier } from '../../api/bft/verification/UnicityCertificateVerifier.js';
 import { PredicateVerifierService } from '../../predicate/verification/PredicateVerifierService.js';
 
 /**
@@ -15,4 +16,5 @@ export interface IVerificationContext {
   readonly predicateVerifier: PredicateVerifierService;
   readonly tokenIssuanceVerifier: TokenIssuanceVerifierService;
   readonly trustBase: RootTrustBase;
+  readonly unicityCertificateVerifier: UnicityCertificateVerifier;
 }

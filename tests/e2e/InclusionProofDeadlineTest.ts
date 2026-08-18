@@ -1,10 +1,12 @@
 import { createE2EContext } from './E2EConfig.js';
+import { UnicityCertificateVerifier } from '../../src/api/bft/verification/UnicityCertificateVerifier.js';
 import { CertificationData } from '../../src/api/CertificationData.js';
 import { CertificationResponse } from '../../src/api/CertificationResponse.js';
 import { IAggregatorClient } from '../../src/api/IAggregatorClient.js';
 import { InclusionProofResponse } from '../../src/api/InclusionProofResponse.js';
 import { IRequestOptions } from '../../src/api/IRequestOptions.js';
 import { StateId } from '../../src/api/StateId.js';
+import { Secp256k1SignatureVerifier } from '../../src/crypto/secp256k1/Secp256k1SignatureVerifier.js';
 import { SigningService } from '../../src/crypto/secp256k1/SigningService.js';
 import { SignaturePredicate } from '../../src/predicate/builtin/SignaturePredicate.js';
 import { PredicateVerifierService } from '../../src/predicate/verification/PredicateVerifierService.js';
@@ -49,6 +51,7 @@ class DeadlineDuringRequestClient implements IAggregatorClient {
 describe('E2E waitInclusionProof deadline', () => {
   const { aggregatorClient, trustBase } = createE2EContext();
   const predicateVerifier = PredicateVerifierService.create();
+  const unicityCertificateVerifier = new UnicityCertificateVerifier(new Secp256k1SignatureVerifier());
 
   let transaction: MintTransaction;
 
@@ -68,7 +71,15 @@ describe('E2E waitInclusionProof deadline', () => {
   const outcomeOf = async (client: StateTransitionClient, signal: AbortSignal, interval: number): Promise<string> => {
     let guard: ReturnType<typeof setTimeout> | undefined;
     const outcome = await Promise.race([
-      waitInclusionProof(client, trustBase, predicateVerifier, transaction, signal, interval).then(
+      waitInclusionProof(
+        client,
+        trustBase,
+        predicateVerifier,
+        unicityCertificateVerifier,
+        transaction,
+        signal,
+        interval,
+      ).then(
         () => 'resolved',
         (err: unknown) => (err instanceof Error ? err.name : String(err)),
       ),

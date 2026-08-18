@@ -1,12 +1,14 @@
 import { UnicitySealHashMatchesWithRootHashRule } from './rule/UnicitySealHashMatchesWithRootHashRule.js';
 import { UnicitySealQuorumSignaturesVerificationRule } from './rule/UnicitySealQuorumSignaturesVerificationRule.js';
+import { ISignatureVerifier } from '../../../crypto/ISignatureVerifier.js';
+import { Signature } from '../../../crypto/secp256k1/Signature.js';
 import { VerificationResult } from '../../../verification/VerificationResult.js';
 import { VerificationStatus } from '../../../verification/VerificationStatus.js';
 import { InclusionProof } from '../../InclusionProof.js';
 import { RootTrustBase } from '../RootTrustBase.js';
 
 /**
- * Result of a {@link UnicityCertificateVerification} run.
+ * Result of a {@link UnicityCertificateVerifier} run.
  */
 class UnicityCertificateVerificationResult extends VerificationResult<VerificationStatus> {
   private constructor(status: VerificationStatus, results: VerificationResult<unknown>[]) {
@@ -36,8 +38,17 @@ class UnicityCertificateVerificationResult extends VerificationResult<Verificati
 
 /**
  * Unicity certificate verification.
+ *
+ * Owns the {@link ISignatureVerifier} used for the seal's quorum signatures, so
+ * callers pass this domain-level verifier around rather than a bare signature
+ * verifier that says nothing about what it verifies.
  */
-export class UnicityCertificateVerification {
+export class UnicityCertificateVerifier {
+  /**
+   * @param {ISignatureVerifier<Signature>} signatureVerifier Verifier for root-node signatures.
+   */
+  public constructor(private readonly signatureVerifier: ISignatureVerifier<Signature>) {}
+
   /**
    * Verify the unicity certificate in an inclusion proof against the trust base.
    *
@@ -45,7 +56,7 @@ export class UnicityCertificateVerification {
    * @param {InclusionProof} inclusionProof Inclusion proof carrying the unicity certificate.
    * @returns {Promise<UnicityCertificateVerificationResult>} Verification outcome.
    */
-  public static async verify(
+  public async verify(
     trustBase: RootTrustBase,
     inclusionProof: InclusionProof,
   ): Promise<UnicityCertificateVerificationResult> {
@@ -65,6 +76,7 @@ export class UnicityCertificateVerification {
 
     result = await UnicitySealQuorumSignaturesVerificationRule.verify(
       trustBase,
+      this.signatureVerifier,
       inclusionProof.unicityCertificate.unicitySeal,
     );
     results.push(result);
