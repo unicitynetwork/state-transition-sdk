@@ -88,12 +88,12 @@ export class SigningService implements ISigningService<Signature> {
    *   recovered public key matches `publicKey`.
    */
   public static verifyWithPublicKey(hash: DataHash, signature: Signature, publicKey: Uint8Array): Promise<boolean> {
-    const expectedPublicKey = new Uint8Array(publicKey);
-    if (!areUint8ArraysEqual(expectedPublicKey, SigningService.recoverPublicKey(hash, signature))) {
+    const recovered = SigningService.recoverSignature(hash, signature);
+    if (recovered === null || recovered.hasHighS) {
       return Promise.resolve(false);
     }
 
-    return SigningService.verify(hash, signature.bytes, expectedPublicKey);
+    return Promise.resolve(areUint8ArraysEqual(new Uint8Array(publicKey), recovered.publicKey));
   }
 
   /**
@@ -106,28 +106,43 @@ export class SigningService implements ISigningService<Signature> {
    * @returns {Promise<boolean>} True if the signature verifies.
    */
   public static verifyWithRecoveredPublicKey(hash: DataHash, signature: Signature): Promise<boolean> {
-    const recoveredPublicKey = SigningService.recoverPublicKey(hash, signature);
-    if (recoveredPublicKey === null) {
+    const recovered = SigningService.recoverSignature(hash, signature);
+    if (recovered === null) {
       return Promise.resolve(false);
     }
 
-    return SigningService.verify(hash, signature.bytes, recoveredPublicKey);
+    return SigningService.verify(hash, signature.bytes, recovered.publicKey);
   }
 
   /**
    * Recover the compressed public key that produced `signature` over `hash`,
-   * using the signature's recovery byte.
+   * together with the signature's malleability flag, parsing the signature once.
+   *
+   * Key recovery is itself the validity check: the recovered key is by
+   * construction the only key under which `(r, s)` verifies for `hash`, so a
+   * caller that compares it against an expected key needs no second EC
+   * verification. `hasHighS` is returned alongside because recovery — unlike
+   * `secp256k1.verify`, which applies noble's default `lowS: true` policy —
+   * accepts malleable signatures, so callers relying on recovery alone must
+   * reject high-s themselves.
    *
    * @param {DataHash} hash Hash that was signed.
    * @param {Signature} signature Recoverable signature.
-   * @returns {Uint8Array|null} Recovered compressed public key, or `null` if the
-   *   signature is not recoverable (e.g. `r`/`s` out of range).
+   * @returns {{ hasHighS: boolean; publicKey: Uint8Array }|null} Recovered public
+   *   key and malleability flag, or `null` if the signature is not recoverable
+   *   (e.g. `r`/`s` out of range).
    */
-  private static recoverPublicKey(hash: DataHash, signature: Signature): Uint8Array | null {
+  private static recoverSignature(
+    hash: DataHash,
+    signature: Signature,
+  ): { hasHighS: boolean; publicKey: Uint8Array } | null {
     try {
-      return secp256k1.Signature.fromBytes(new Uint8Array([signature.recovery, ...signature.bytes]), 'recovered')
-        .recoverPublicKey(hash.data)
-        .toBytes();
+      const recoverable = secp256k1.Signature.fromBytes(
+        new Uint8Array([signature.recovery, ...signature.bytes]),
+        'recovered',
+      );
+
+      return { hasHighS: recoverable.hasHighS(), publicKey: recoverable.recoverPublicKey(hash.data).toBytes() };
     } catch {
       return null;
     }

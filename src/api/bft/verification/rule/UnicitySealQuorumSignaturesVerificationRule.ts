@@ -1,6 +1,9 @@
 import { DataHash } from '../../../../crypto/hash/DataHash.js';
+import { DataHasher } from '../../../../crypto/hash/DataHasher.js';
+import { HashAlgorithm } from '../../../../crypto/hash/HashAlgorithm.js';
 import { Signature } from '../../../../crypto/secp256k1/Signature.js';
 import { SigningService } from '../../../../crypto/secp256k1/SigningService.js';
+import { HexConverter } from '../../../../util/HexConverter.js';
 import { VerificationResult } from '../../../../verification/VerificationResult.js';
 import { VerificationStatus } from '../../../../verification/VerificationStatus.js';
 import { RootTrustBase } from '../../RootTrustBase.js';
@@ -11,7 +14,44 @@ import { UnicitySeal } from '../../UnicitySeal.js';
  */
 export class UnicitySealQuorumSignaturesVerificationRule {
   /**
+   * Upper bound on memoised seals per trust base. Certifications made in one
+   * batch land in a handful of adjacent aggregator rounds — measured on
+   * testnet2, twenty inclusion proofs shared three seals — so a small cache
+   * captures the clustering, while the bound stops a stream of distinct
+   * (including invalid-but-well-formed) seals from growing it without limit.
+   */
+  private static readonly MAX_CACHED_SEALS = 256;
+
+  /**
+   * Seals that have already reached quorum, keyed by trust base instance and
+   * then by the hash of the seal's **complete** encoding.
+   *
+   * Two subtleties make this sound:
+   *
+   * 1. The key covers the signatures. {@link UnicitySeal.calculateHash} hashes
+   *    the seal *without* them — it is the digest the root nodes sign — so
+   *    keying on it would let a seal's valid signatures be swapped for garbage
+   *    and still hit a cached OK. The key here is over `toCBOR()`, which
+   *    encodes the signatures too, so a cache hit means byte-identical input.
+   * 2. The trust base is part of the key by instance identity (a `WeakMap`),
+   *    since the outcome depends on its root nodes and quorum threshold.
+   *    `RootTrustBase` fields are readonly, so an instance cannot change
+   *    underneath the cache; a different instance simply misses.
+   *
+   * Only quorum-reaching outcomes are stored: a failure is the abnormal path,
+   * and not caching it keeps a flood of bad seals from evicting good entries.
+   */
+  private static readonly VERIFIED_SEALS = new WeakMap<
+    RootTrustBase,
+    Map<string, VerificationResult<VerificationStatus>>
+  >();
+
+  /**
    * Verify the unicity seal carries a quorum of valid root-node signatures.
+   *
+   * Signature verification dominates inclusion-proof verification, and every
+   * proof certified in the same aggregator round carries the same seal, so a
+   * verified seal is memoised (see {@link VERIFIED_SEALS}).
    *
    * @param {RootTrustBase} trustBase Root trust base.
    * @param {UnicitySeal} unicitySeal Seal to verify.
@@ -21,6 +61,14 @@ export class UnicitySealQuorumSignaturesVerificationRule {
     trustBase: RootTrustBase,
     unicitySeal: UnicitySeal,
   ): Promise<VerificationResult<VerificationStatus>> {
+    const cacheKey = HexConverter.encode(
+      (await new DataHasher(HashAlgorithm.SHA256).update(unicitySeal.toCBOR()).digest()).imprint,
+    );
+    const cached = UnicitySealQuorumSignaturesVerificationRule.VERIFIED_SEALS.get(trustBase)?.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     const hash = await unicitySeal.calculateHash();
 
     const results = await Promise.all(
@@ -35,12 +83,15 @@ export class UnicitySealQuorumSignaturesVerificationRule {
       0,
     );
     if (successful >= trustBase.quorumThreshold) {
-      return new VerificationResult(
+      const result = new VerificationResult(
         'UnicitySealQuorumSignaturesVerificationRule',
         VerificationStatus.OK,
         'Unicity quorum signatures verification threshold reached',
         results,
       );
+      UnicitySealQuorumSignaturesVerificationRule.remember(trustBase, cacheKey, result);
+
+      return result;
     }
 
     return new VerificationResult(
@@ -49,6 +100,36 @@ export class UnicitySealQuorumSignaturesVerificationRule {
       'Not enough unicity quorum signatures verification succeeded',
       results,
     );
+  }
+
+  /**
+   * Store a quorum-reaching outcome, evicting the oldest entry once the trust
+   * base's cache is full (`Map` iterates in insertion order).
+   *
+   * @param {RootTrustBase} trustBase Trust base the outcome was verified against.
+   * @param {string} cacheKey Hash of the seal's complete encoding.
+   * @param {VerificationResult<VerificationStatus>} result Outcome to memoise.
+   * @returns {void}
+   */
+  private static remember(
+    trustBase: RootTrustBase,
+    cacheKey: string,
+    result: VerificationResult<VerificationStatus>,
+  ): void {
+    let seals = UnicitySealQuorumSignaturesVerificationRule.VERIFIED_SEALS.get(trustBase);
+    if (!seals) {
+      seals = new Map();
+      UnicitySealQuorumSignaturesVerificationRule.VERIFIED_SEALS.set(trustBase, seals);
+    }
+
+    if (seals.size >= UnicitySealQuorumSignaturesVerificationRule.MAX_CACHED_SEALS) {
+      const oldest = seals.keys().next();
+      if (!oldest.done) {
+        seals.delete(oldest.value);
+      }
+    }
+
+    seals.set(cacheKey, result);
   }
 
   private static async verifySignature(
