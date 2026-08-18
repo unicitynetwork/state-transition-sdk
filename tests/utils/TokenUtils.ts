@@ -47,10 +47,12 @@ export async function mintToken(
     await transaction.toCertifiedTransaction(
       verificationContext.trustBase,
       verificationContext.predicateVerifier,
+      verificationContext.unicityCertificateVerifier,
       await waitInclusionProof(
         client,
         verificationContext.trustBase,
         verificationContext.predicateVerifier,
+        verificationContext.unicityCertificateVerifier,
         transaction,
       ),
     ),
@@ -102,10 +104,12 @@ export async function transferTokenWithTransaction(
     await transaction.toCertifiedTransaction(
       verificationContext.trustBase,
       verificationContext.predicateVerifier,
+      verificationContext.unicityCertificateVerifier,
       await waitInclusionProof(
         client,
         verificationContext.trustBase,
         verificationContext.predicateVerifier,
+        verificationContext.unicityCertificateVerifier,
         transaction,
       ),
     ),

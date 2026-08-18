@@ -16,6 +16,7 @@ import { TokenIssuanceVerifierService } from '../../../src/transaction/verificat
 import { VerificationContext } from '../../../src/transaction/verification/VerificationContext.js';
 import { HexConverter } from '../../../src/util/HexConverter.js';
 import { waitInclusionProof } from '../../../src/util/InclusionProofUtils.js';
+import { createUnicityCertificateVerifier } from '../../utils/UnicityCertificateVerifierFixture.js';
 import trustBaseJson from '../trust-base.json' with { type: 'json' };
 
 it('Token minting', async () => {
@@ -25,9 +26,11 @@ it('Token minting', async () => {
   const client = new StateTransitionClient(aggregatorClient);
 
   const predicateVerifier = PredicateVerifierService.create();
+  const unicityCertificateVerifier = createUnicityCertificateVerifier();
   const verificationContext = new VerificationContext(
     trustBase,
     predicateVerifier,
+    unicityCertificateVerifier,
     new MintJustificationVerifierService(),
     new TokenIssuanceVerifierService(false),
   );
@@ -50,7 +53,8 @@ it('Token minting', async () => {
     await mintTransaction.toCertifiedTransaction(
       trustBase,
       predicateVerifier,
-      await waitInclusionProof(client, trustBase, predicateVerifier, mintTransaction),
+      unicityCertificateVerifier,
+      await waitInclusionProof(client, trustBase, predicateVerifier, unicityCertificateVerifier, mintTransaction),
     ),
     verificationContext,
   );

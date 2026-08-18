@@ -6,7 +6,7 @@ import { InclusionProof } from '../../InclusionProof.js';
 import { RootTrustBase } from '../RootTrustBase.js';
 
 /**
- * Result of a {@link UnicityCertificateVerification} run.
+ * Result of a {@link UnicityCertificateVerifier} run.
  */
 class UnicityCertificateVerificationResult extends VerificationResult<VerificationStatus> {
   private constructor(status: VerificationStatus, results: VerificationResult<unknown>[]) {
@@ -36,8 +36,26 @@ class UnicityCertificateVerificationResult extends VerificationResult<Verificati
 
 /**
  * Unicity certificate verification.
+ *
+ * Composed from the quorum-signature rule, which carries the signature verifier
+ * and any seal memo, so callers pass this domain-level verifier around rather
+ * than a bare signature verifier that says nothing about what it verifies:
+ *
+ * ```ts
+ * new UnicityCertificateVerifier(
+ *   new UnicitySealQuorumSignaturesVerificationRule(
+ *     new Secp256k1SignatureVerifier(),
+ *     new VerifiedSealCache(256), // omit to verify every seal afresh
+ *   ),
+ * );
+ * ```
  */
-export class UnicityCertificateVerification {
+export class UnicityCertificateVerifier {
+  /**
+   * @param {UnicitySealQuorumSignaturesVerificationRule} quorumSignaturesRule Seal quorum-signature rule.
+   */
+  public constructor(private readonly quorumSignaturesRule: UnicitySealQuorumSignaturesVerificationRule) {}
+
   /**
    * Verify the unicity certificate in an inclusion proof against the trust base.
    *
@@ -45,7 +63,7 @@ export class UnicityCertificateVerification {
    * @param {InclusionProof} inclusionProof Inclusion proof carrying the unicity certificate.
    * @returns {Promise<UnicityCertificateVerificationResult>} Verification outcome.
    */
-  public static async verify(
+  public async verify(
     trustBase: RootTrustBase,
     inclusionProof: InclusionProof,
   ): Promise<UnicityCertificateVerificationResult> {
@@ -63,10 +81,7 @@ export class UnicityCertificateVerification {
       return UnicityCertificateVerificationResult.fail(results);
     }
 
-    result = await UnicitySealQuorumSignaturesVerificationRule.verify(
-      trustBase,
-      inclusionProof.unicityCertificate.unicitySeal,
-    );
+    result = await this.quorumSignaturesRule.verify(trustBase, inclusionProof.unicityCertificate.unicitySeal);
     results.push(result);
     if (result.status !== VerificationStatus.OK) {
       return UnicityCertificateVerificationResult.fail(results);

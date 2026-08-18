@@ -26,6 +26,7 @@ import { VerificationContext } from '../../../src/transaction/verification/Verif
 import { HexConverter } from '../../../src/util/HexConverter.js';
 import { waitInclusionProof } from '../../../src/util/InclusionProofUtils.js';
 import { VerificationStatus } from '../../../src/verification/VerificationStatus.js';
+import { createUnicityCertificateVerifier } from '../../utils/UnicityCertificateVerifierFixture.js';
 import { TestAggregatorClient } from '../TestAggregatorClient.js';
 
 describe('SplitBuilder Functional Test', () => {
@@ -34,11 +35,13 @@ describe('SplitBuilder Functional Test', () => {
     const trustBase = aggregatorClient.rootTrustBase;
     const client = new StateTransitionClient(aggregatorClient);
     const predicateVerifier = PredicateVerifierService.create();
+    const unicityCertificateVerifier = createUnicityCertificateVerifier();
     const mintJustificationVerifier = new MintJustificationVerifierService();
     mintJustificationVerifier.register(new SplitMintJustificationVerifier(TestPaymentData.decode));
     const verificationContext = new VerificationContext(
       trustBase,
       predicateVerifier,
+      unicityCertificateVerifier,
       mintJustificationVerifier,
       new TokenIssuanceVerifierService(false),
     );
@@ -63,7 +66,8 @@ describe('SplitBuilder Functional Test', () => {
       await mintTransaction.toCertifiedTransaction(
         trustBase,
         predicateVerifier,
-        await waitInclusionProof(client, trustBase, predicateVerifier, mintTransaction),
+        unicityCertificateVerifier,
+        await waitInclusionProof(client, trustBase, predicateVerifier, unicityCertificateVerifier, mintTransaction),
       ),
       verificationContext,
     );
@@ -115,7 +119,14 @@ describe('SplitBuilder Functional Test', () => {
       await result.burn.transaction.toCertifiedTransaction(
         trustBase,
         predicateVerifier,
-        await waitInclusionProof(client, trustBase, predicateVerifier, result.burn.transaction),
+        unicityCertificateVerifier,
+        await waitInclusionProof(
+          client,
+          trustBase,
+          predicateVerifier,
+          unicityCertificateVerifier,
+          result.burn.transaction,
+        ),
       ),
       verificationContext,
     );
@@ -140,7 +151,8 @@ describe('SplitBuilder Functional Test', () => {
         await mintTransaction.toCertifiedTransaction(
           trustBase,
           predicateVerifier,
-          await waitInclusionProof(client, trustBase, predicateVerifier, mintTransaction),
+          unicityCertificateVerifier,
+          await waitInclusionProof(client, trustBase, predicateVerifier, unicityCertificateVerifier, mintTransaction),
         ),
         verificationContext,
       );
@@ -174,7 +186,14 @@ describe('SplitBuilder Functional Test', () => {
       await secondSplit.burn.transaction.toCertifiedTransaction(
         trustBase,
         predicateVerifier,
-        await waitInclusionProof(client, trustBase, predicateVerifier, secondSplit.burn.transaction),
+        unicityCertificateVerifier,
+        await waitInclusionProof(
+          client,
+          trustBase,
+          predicateVerifier,
+          unicityCertificateVerifier,
+          secondSplit.burn.transaction,
+        ),
       ),
       verificationContext,
     );
@@ -198,7 +217,14 @@ describe('SplitBuilder Functional Test', () => {
       await secondMintTransaction.toCertifiedTransaction(
         trustBase,
         predicateVerifier,
-        await waitInclusionProof(client, trustBase, predicateVerifier, secondMintTransaction),
+        unicityCertificateVerifier,
+        await waitInclusionProof(
+          client,
+          trustBase,
+          predicateVerifier,
+          unicityCertificateVerifier,
+          secondMintTransaction,
+        ),
       ),
       verificationContext,
     );
@@ -215,11 +241,13 @@ describe('SplitBuilder Functional Test', () => {
     const trustBase = aggregatorClient.rootTrustBase;
     const client = new StateTransitionClient(aggregatorClient);
     const predicateVerifier = PredicateVerifierService.create();
+    const unicityCertificateVerifier = createUnicityCertificateVerifier();
     const mintJustificationVerifier = new MintJustificationVerifierService();
     mintJustificationVerifier.register(new SplitMintJustificationVerifier(TestPaymentData.decode));
     const verificationContext = new VerificationContext(
       trustBase,
       predicateVerifier,
+      unicityCertificateVerifier,
       mintJustificationVerifier,
       new TokenIssuanceVerifierService(false),
     );
@@ -239,7 +267,8 @@ describe('SplitBuilder Functional Test', () => {
       await mintTransaction.toCertifiedTransaction(
         trustBase,
         predicateVerifier,
-        await waitInclusionProof(client, trustBase, predicateVerifier, mintTransaction),
+        unicityCertificateVerifier,
+        await waitInclusionProof(client, trustBase, predicateVerifier, unicityCertificateVerifier, mintTransaction),
       ),
       verificationContext,
     );

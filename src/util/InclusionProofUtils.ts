@@ -1,4 +1,5 @@
 import { RootTrustBase } from '../api/bft/RootTrustBase.js';
+import { UnicityCertificateVerifier } from '../api/bft/verification/UnicityCertificateVerifier.js';
 import { InclusionProof } from '../api/InclusionProof.js';
 import { JsonRpcNetworkError } from '../api/json-rpc/JsonRpcNetworkError.js';
 import { StateId } from '../api/StateId.js';
@@ -156,6 +157,7 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
  * @param {StateTransitionClient} client Client used to fetch inclusion proofs.
  * @param {RootTrustBase} trustBase Root trust base used to verify the inclusion certificate.
  * @param {PredicateVerifierService} predicateVerifier Verifier used to check the transaction predicate.
+ * @param {UnicityCertificateVerifier} unicityCertificateVerifier Unicity certificate verifier.
  * @param {ITransaction} transaction Transaction whose inclusion is being awaited.
  * @param {AbortSignal} signal Abort signal that terminates polling. Defaults to a 10s timeout.
  * @param {number} interval Delay between polls in milliseconds. Defaults to 1000.
@@ -166,6 +168,7 @@ export async function waitInclusionProof(
   client: StateTransitionClient,
   trustBase: RootTrustBase,
   predicateVerifier: PredicateVerifierService,
+  unicityCertificateVerifier: UnicityCertificateVerifier,
   transaction: ITransaction,
   signal: AbortSignal = AbortSignal.timeout(10000),
   interval: number = 1000,
@@ -178,6 +181,7 @@ export async function waitInclusionProof(
     const verificationStatus = await InclusionProofVerificationRule.verify(
       trustBase,
       predicateVerifier,
+      unicityCertificateVerifier,
       inclusionProof,
       transactionHash,
       transaction.lockScript,

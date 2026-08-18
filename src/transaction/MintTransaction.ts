@@ -6,6 +6,7 @@ import { TokenId } from './TokenId.js';
 import { TokenSalt } from './TokenSalt.js';
 import { TokenType } from './TokenType.js';
 import { RootTrustBase } from '../api/bft/RootTrustBase.js';
+import { UnicityCertificateVerifier } from '../api/bft/verification/UnicityCertificateVerifier.js';
 import { InclusionProof } from '../api/InclusionProof.js';
 import { NetworkId } from '../api/NetworkId.js';
 import { DataHash } from '../crypto/hash/DataHash.js';
@@ -181,15 +182,23 @@ export class MintTransaction implements ITransaction {
    *
    * @param {RootTrustBase} trustBase Root trust base used to verify the inclusion certificate.
    * @param {PredicateVerifierService} predicateVerifier Verifier for any predicates.
+   * @param {UnicityCertificateVerifier} unicityCertificateVerifier Unicity certificate verifier.
    * @param {InclusionProof} inclusionProof Inclusion proof for this transaction.
    * @returns {Promise<CertifiedMintTransaction>} Verified certified transaction.
    */
   public toCertifiedTransaction(
     trustBase: RootTrustBase,
     predicateVerifier: PredicateVerifierService,
+    unicityCertificateVerifier: UnicityCertificateVerifier,
     inclusionProof: InclusionProof,
   ): Promise<CertifiedMintTransaction> {
-    return CertifiedMintTransaction.fromTransaction(trustBase, predicateVerifier, this, inclusionProof);
+    return CertifiedMintTransaction.fromTransaction(
+      trustBase,
+      predicateVerifier,
+      unicityCertificateVerifier,
+      this,
+      inclusionProof,
+    );
   }
 
   /**

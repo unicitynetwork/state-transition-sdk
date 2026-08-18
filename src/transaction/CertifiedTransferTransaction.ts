@@ -3,6 +3,7 @@ import { StateMask } from './StateMask.js';
 import { Token } from './Token.js';
 import { TransferTransaction } from './TransferTransaction.js';
 import { RootTrustBase } from '../api/bft/RootTrustBase.js';
+import { UnicityCertificateVerifier } from '../api/bft/verification/UnicityCertificateVerifier.js';
 import { InclusionProof } from '../api/InclusionProof.js';
 import { DataHash } from '../crypto/hash/DataHash.js';
 import { EncodedPredicate } from '../predicate/EncodedPredicate.js';
@@ -80,6 +81,7 @@ export class CertifiedTransferTransaction implements ITransaction {
    *
    * @param {RootTrustBase} trustBase Root trust base used to verify the inclusion certificate.
    * @param {PredicateVerifierService} predicateVerifier Verifier for any embedded predicates.
+   * @param {UnicityCertificateVerifier} unicityCertificateVerifier Unicity certificate verifier.
    * @param {TransferTransaction} transaction Transaction to certify.
    * @param {InclusionProof} inclusionProof Inclusion proof for the transaction.
    * @returns {Promise<CertifiedTransferTransaction>} Verified certified transaction.
@@ -88,12 +90,14 @@ export class CertifiedTransferTransaction implements ITransaction {
   public static async fromTransaction(
     trustBase: RootTrustBase,
     predicateVerifier: PredicateVerifierService,
+    unicityCertificateVerifier: UnicityCertificateVerifier,
     transaction: TransferTransaction,
     inclusionProof: InclusionProof,
   ): Promise<CertifiedTransferTransaction> {
     const result = await InclusionProofVerificationRule.verify(
       trustBase,
       predicateVerifier,
+      unicityCertificateVerifier,
       inclusionProof,
       await transaction.calculateTransactionHash(),
       transaction.lockScript,

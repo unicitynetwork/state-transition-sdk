@@ -20,6 +20,7 @@ import { TokenType } from '../../../src/transaction/TokenType.js';
 import { SleepError, waitInclusionProof } from '../../../src/util/InclusionProofUtils.js';
 import { createRootTrustBase } from '../../utils/RootTrustBaseFixture.js';
 import { createUnicityCertificate } from '../../utils/UnicityCertificateFixture.js';
+import { createUnicityCertificateVerifier } from '../../utils/UnicityCertificateVerifierFixture.js';
 
 interface IDeferred<T> {
   readonly promise: Promise<T>;
@@ -64,6 +65,7 @@ describe('waitInclusionProof', () => {
   const signingService = SigningService.generate();
   const trustBase = createRootTrustBase(signingService.publicKey);
   const predicateVerifier = PredicateVerifierService.create();
+  const unicityCertificateVerifier = createUnicityCertificateVerifier();
 
   let transaction: MintTransaction;
   let pendingProof: InclusionProof;
@@ -91,6 +93,7 @@ describe('waitInclusionProof', () => {
       new StateTransitionClient(aggregatorClient),
       trustBase,
       predicateVerifier,
+      unicityCertificateVerifier,
       transaction,
       signal,
       interval,

@@ -4,6 +4,7 @@ import { Worker } from 'node:worker_threads';
 
 import { ExampleTransferTransactionVerifierWorker } from './ExampleTransferTransactionVerifierWorker.js';
 import { TestAggregatorClient } from './TestAggregatorClient.js';
+import { UnicityCertificateVerifier } from '../../src/api/bft/verification/UnicityCertificateVerifier.js';
 import { SigningService } from '../../src/crypto/secp256k1/SigningService.js';
 import { SignaturePredicate } from '../../src/predicate/builtin/SignaturePredicate.js';
 import { PredicateVerifierService } from '../../src/predicate/verification/PredicateVerifierService.js';
@@ -24,6 +25,7 @@ import {
 } from '../../src/transaction/verification/worker/WorkerTokenVerifier.js';
 import { VerificationStatus } from '../../src/verification/VerificationStatus.js';
 import { mintToken, transferToken } from '../utils/TokenUtils.js';
+import { createUnicityCertificateVerifier } from '../utils/UnicityCertificateVerifierFixture.js';
 
 type Responder = (request: ITransferTransactionVerificationRequest) => Promise<TransferTransactionVerificationResponse>;
 
@@ -95,6 +97,7 @@ describe('WorkerTokenVerifier', () => {
     new VerificationContext(
       trustBase,
       PredicateVerifierService.create(),
+      createUnicityCertificateVerifier(),
       new MintJustificationVerifierService(),
       new TokenIssuanceVerifierService(false),
     );
@@ -198,6 +201,10 @@ describe('WorkerTokenVerifier', () => {
     class CustomTransferTransactionVerifier extends TransferTransactionVerifier {
       protected get predicateVerifier(): PredicateVerifierService {
         return customPredicateVerifier;
+      }
+
+      protected get unicityCertificateVerifier(): UnicityCertificateVerifier {
+        return createUnicityCertificateVerifier();
       }
     }
 

@@ -1,6 +1,7 @@
 import { DataHash } from '../../../../../src/crypto/hash/DataHash.js';
 import { DataHasher } from '../../../../../src/crypto/hash/DataHasher.js';
 import { HashAlgorithm } from '../../../../../src/crypto/hash/HashAlgorithm.js';
+import { Secp256k1SignatureVerifier } from '../../../../../src/crypto/secp256k1/Secp256k1SignatureVerifier.js';
 import { Signature } from '../../../../../src/crypto/secp256k1/Signature.js';
 import { SigningService } from '../../../../../src/crypto/secp256k1/SigningService.js';
 import { SignaturePredicate } from '../../../../../src/predicate/builtin/SignaturePredicate.js';
@@ -10,7 +11,7 @@ import { CborSerializer } from '../../../../../src/serialization/cbor/CborSerial
 import { VerificationStatus } from '../../../../../src/verification/VerificationStatus.js';
 
 describe('SignaturePredicateVerifier', () => {
-  const verifier = new SignaturePredicateVerifier();
+  const verifier = new SignaturePredicateVerifier(new Secp256k1SignatureVerifier());
   const signingService = SigningService.generate();
   const encodedPredicate = EncodedPredicate.fromPredicate(SignaturePredicate.fromSigningService(signingService));
 

@@ -22,13 +22,16 @@ import { VerificationContext } from '../../../src/transaction/verification/Verif
 import { HexConverter } from '../../../src/util/HexConverter.js';
 import { waitInclusionProof } from '../../../src/util/InclusionProofUtils.js';
 import { VerificationStatus } from '../../../src/verification/VerificationStatus.js';
+import { createUnicityCertificateVerifier } from '../../utils/UnicityCertificateVerifierFixture.js';
 import trustBaseJson from '../trust-base.json' with { type: 'json' };
 
 async function receiveToken(client: StateTransitionClient, trustBase: RootTrustBase): Promise<string> {
   const predicateVerifier = PredicateVerifierService.create();
+  const unicityCertificateVerifier = createUnicityCertificateVerifier();
   const verificationContext = new VerificationContext(
     trustBase,
     predicateVerifier,
+    unicityCertificateVerifier,
     new MintJustificationVerifierService(),
     new TokenIssuanceVerifierService(false),
   );
@@ -51,7 +54,8 @@ async function receiveToken(client: StateTransitionClient, trustBase: RootTrustB
     await mintTransaction.toCertifiedTransaction(
       trustBase,
       predicateVerifier,
-      await waitInclusionProof(client, trustBase, predicateVerifier, mintTransaction),
+      unicityCertificateVerifier,
+      await waitInclusionProof(client, trustBase, predicateVerifier, unicityCertificateVerifier, mintTransaction),
     ),
     verificationContext,
   );
@@ -64,9 +68,11 @@ it('Token transfer', async () => {
   const trustBase = RootTrustBase.fromJSON(trustBaseJson);
   const client = new StateTransitionClient(aggregatorClient);
   const predicateVerifier = PredicateVerifierService.create();
+  const unicityCertificateVerifier = createUnicityCertificateVerifier();
   const verificationContext = new VerificationContext(
     trustBase,
     predicateVerifier,
+    unicityCertificateVerifier,
     new MintJustificationVerifierService(),
     new TokenIssuanceVerifierService(false),
   );
@@ -106,7 +112,8 @@ it('Token transfer', async () => {
     await transferTransaction.toCertifiedTransaction(
       trustBase,
       predicateVerifier,
-      await waitInclusionProof(client, trustBase, predicateVerifier, transferTransaction),
+      unicityCertificateVerifier,
+      await waitInclusionProof(client, trustBase, predicateVerifier, unicityCertificateVerifier, transferTransaction),
     ),
     verificationContext,
   );

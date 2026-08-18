@@ -25,6 +25,7 @@ import { TokenIssuanceVerifierService } from '../../../src/transaction/verificat
 import { VerificationContext } from '../../../src/transaction/verification/VerificationContext.js';
 import { HexConverter } from '../../../src/util/HexConverter.js';
 import { waitInclusionProof } from '../../../src/util/InclusionProofUtils.js';
+import { createUnicityCertificateVerifier } from '../../utils/UnicityCertificateVerifierFixture.js';
 import trustBaseJson from '../trust-base.json' with { type: 'json' };
 
 it('Token splitting', async () => {
@@ -34,11 +35,13 @@ it('Token splitting', async () => {
   const client = new StateTransitionClient(aggregatorClient);
 
   const predicateVerifier = PredicateVerifierService.create();
+  const unicityCertificateVerifier = createUnicityCertificateVerifier();
   const mintJustificationVerifier = new MintJustificationVerifierService();
   mintJustificationVerifier.register(new SplitMintJustificationVerifier(CustomPaymentData.decode));
   const verificationContext = new VerificationContext(
     trustBase,
     predicateVerifier,
+    unicityCertificateVerifier,
     mintJustificationVerifier,
     new TokenIssuanceVerifierService(false),
   );
@@ -72,7 +75,8 @@ it('Token splitting', async () => {
     await mintTransaction.toCertifiedTransaction(
       trustBase,
       predicateVerifier,
-      await waitInclusionProof(client, trustBase, predicateVerifier, mintTransaction),
+      unicityCertificateVerifier,
+      await waitInclusionProof(client, trustBase, predicateVerifier, unicityCertificateVerifier, mintTransaction),
     ),
     verificationContext,
   );
@@ -118,7 +122,14 @@ it('Token splitting', async () => {
     await result.burn.transaction.toCertifiedTransaction(
       trustBase,
       predicateVerifier,
-      await waitInclusionProof(client, trustBase, predicateVerifier, result.burn.transaction),
+      unicityCertificateVerifier,
+      await waitInclusionProof(
+        client,
+        trustBase,
+        predicateVerifier,
+        unicityCertificateVerifier,
+        result.burn.transaction,
+      ),
     ),
     verificationContext,
   );
@@ -145,7 +156,8 @@ it('Token splitting', async () => {
       await mintTransaction.toCertifiedTransaction(
         trustBase,
         predicateVerifier,
-        await waitInclusionProof(client, trustBase, predicateVerifier, mintTransaction),
+        unicityCertificateVerifier,
+        await waitInclusionProof(client, trustBase, predicateVerifier, unicityCertificateVerifier, mintTransaction),
       ),
       verificationContext,
     );

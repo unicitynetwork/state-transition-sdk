@@ -8,6 +8,7 @@ import { MintJustificationVerifierService } from '../../src/transaction/verifica
 import { TokenIssuanceVerifierService } from '../../src/transaction/verification/TokenIssuanceVerifierService.js';
 import { VerificationContext } from '../../src/transaction/verification/VerificationContext.js';
 import { VerificationStatus } from '../../src/verification/VerificationStatus.js';
+import { createUnicityCertificateVerifier } from '../utils/UnicityCertificateVerifierFixture.js';
 
 export const transitionFlowTest = (client: StateTransitionClient, trustBase: RootTrustBase): void => {
   const ALICE_SIGNING_SERVICE = SigningService.generate();
@@ -20,6 +21,7 @@ export const transitionFlowTest = (client: StateTransitionClient, trustBase: Roo
       const verificationContext = new VerificationContext(
         trustBase,
         predicateVerifier,
+        createUnicityCertificateVerifier(),
         new MintJustificationVerifierService(),
         new TokenIssuanceVerifierService(false),
       );

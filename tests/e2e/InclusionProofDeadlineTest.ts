@@ -13,6 +13,7 @@ import { MintTransaction } from '../../src/transaction/MintTransaction.js';
 import { TokenSalt } from '../../src/transaction/TokenSalt.js';
 import { TokenType } from '../../src/transaction/TokenType.js';
 import { waitInclusionProof } from '../../src/util/InclusionProofUtils.js';
+import { createUnicityCertificateVerifier } from '../utils/UnicityCertificateVerifierFixture.js';
 
 /** How long a wait may run past its own deadline before it counts as unbounded. */
 const UNBOUNDED_AFTER_MS = 20000;
@@ -49,6 +50,7 @@ class DeadlineDuringRequestClient implements IAggregatorClient {
 describe('E2E waitInclusionProof deadline', () => {
   const { aggregatorClient, trustBase } = createE2EContext();
   const predicateVerifier = PredicateVerifierService.create();
+  const unicityCertificateVerifier = createUnicityCertificateVerifier();
 
   let transaction: MintTransaction;
 
@@ -68,7 +70,15 @@ describe('E2E waitInclusionProof deadline', () => {
   const outcomeOf = async (client: StateTransitionClient, signal: AbortSignal, interval: number): Promise<string> => {
     let guard: ReturnType<typeof setTimeout> | undefined;
     const outcome = await Promise.race([
-      waitInclusionProof(client, trustBase, predicateVerifier, transaction, signal, interval).then(
+      waitInclusionProof(
+        client,
+        trustBase,
+        predicateVerifier,
+        unicityCertificateVerifier,
+        transaction,
+        signal,
+        interval,
+      ).then(
         () => 'resolved',
         (err: unknown) => (err instanceof Error ? err.name : String(err)),
       ),
