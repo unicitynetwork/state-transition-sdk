@@ -1,9 +1,7 @@
 import { TestPaymentData } from './TestPaymentData.js';
-import { UnicityCertificateVerifier } from '../../../src/api/bft/verification/UnicityCertificateVerifier.js';
 import { CertificationData } from '../../../src/api/CertificationData.js';
 import { CertificationStatus } from '../../../src/api/CertificationResponse.js';
 import { NetworkId } from '../../../src/api/NetworkId.js';
-import { Secp256k1SignatureVerifier } from '../../../src/crypto/secp256k1/Secp256k1SignatureVerifier.js';
 import { SigningService } from '../../../src/crypto/secp256k1/SigningService.js';
 import { Asset } from '../../../src/payment/asset/Asset.js';
 import { AssetId } from '../../../src/payment/asset/AssetId.js';
@@ -28,6 +26,7 @@ import { VerificationContext } from '../../../src/transaction/verification/Verif
 import { HexConverter } from '../../../src/util/HexConverter.js';
 import { waitInclusionProof } from '../../../src/util/InclusionProofUtils.js';
 import { VerificationStatus } from '../../../src/verification/VerificationStatus.js';
+import { createUnicityCertificateVerifier } from '../../utils/UnicityCertificateVerifierFixture.js';
 import { TestAggregatorClient } from '../TestAggregatorClient.js';
 
 describe('SplitBuilder Functional Test', () => {
@@ -36,7 +35,7 @@ describe('SplitBuilder Functional Test', () => {
     const trustBase = aggregatorClient.rootTrustBase;
     const client = new StateTransitionClient(aggregatorClient);
     const predicateVerifier = PredicateVerifierService.create();
-    const unicityCertificateVerifier = new UnicityCertificateVerifier(new Secp256k1SignatureVerifier());
+    const unicityCertificateVerifier = createUnicityCertificateVerifier();
     const mintJustificationVerifier = new MintJustificationVerifierService();
     mintJustificationVerifier.register(new SplitMintJustificationVerifier(TestPaymentData.decode));
     const verificationContext = new VerificationContext(
@@ -242,7 +241,7 @@ describe('SplitBuilder Functional Test', () => {
     const trustBase = aggregatorClient.rootTrustBase;
     const client = new StateTransitionClient(aggregatorClient);
     const predicateVerifier = PredicateVerifierService.create();
-    const unicityCertificateVerifier = new UnicityCertificateVerifier(new Secp256k1SignatureVerifier());
+    const unicityCertificateVerifier = createUnicityCertificateVerifier();
     const mintJustificationVerifier = new MintJustificationVerifierService();
     mintJustificationVerifier.register(new SplitMintJustificationVerifier(TestPaymentData.decode));
     const verificationContext = new VerificationContext(

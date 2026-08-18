@@ -1,11 +1,9 @@
 import config from './config.json' with { type: 'json' };
 import { AggregatorClient } from '../../../src/api/AggregatorClient.js';
 import { RootTrustBase } from '../../../src/api/bft/RootTrustBase.js';
-import { UnicityCertificateVerifier } from '../../../src/api/bft/verification/UnicityCertificateVerifier.js';
 import { CertificationData } from '../../../src/api/CertificationData.js';
 import { CertificationStatus } from '../../../src/api/CertificationResponse.js';
 import { NetworkId } from '../../../src/api/NetworkId.js';
-import { Secp256k1SignatureVerifier } from '../../../src/crypto/secp256k1/Secp256k1SignatureVerifier.js';
 import { SigningService } from '../../../src/crypto/secp256k1/SigningService.js';
 import { SignaturePredicate } from '../../../src/predicate/builtin/SignaturePredicate.js';
 import { SignaturePredicateUnlockScript } from '../../../src/predicate/builtin/SignaturePredicateUnlockScript.js';
@@ -24,11 +22,12 @@ import { VerificationContext } from '../../../src/transaction/verification/Verif
 import { HexConverter } from '../../../src/util/HexConverter.js';
 import { waitInclusionProof } from '../../../src/util/InclusionProofUtils.js';
 import { VerificationStatus } from '../../../src/verification/VerificationStatus.js';
+import { createUnicityCertificateVerifier } from '../../utils/UnicityCertificateVerifierFixture.js';
 import trustBaseJson from '../trust-base.json' with { type: 'json' };
 
 async function receiveToken(client: StateTransitionClient, trustBase: RootTrustBase): Promise<string> {
   const predicateVerifier = PredicateVerifierService.create();
-  const unicityCertificateVerifier = new UnicityCertificateVerifier(new Secp256k1SignatureVerifier());
+  const unicityCertificateVerifier = createUnicityCertificateVerifier();
   const verificationContext = new VerificationContext(
     trustBase,
     predicateVerifier,
@@ -69,7 +68,7 @@ it('Token transfer', async () => {
   const trustBase = RootTrustBase.fromJSON(trustBaseJson);
   const client = new StateTransitionClient(aggregatorClient);
   const predicateVerifier = PredicateVerifierService.create();
-  const unicityCertificateVerifier = new UnicityCertificateVerifier(new Secp256k1SignatureVerifier());
+  const unicityCertificateVerifier = createUnicityCertificateVerifier();
   const verificationContext = new VerificationContext(
     trustBase,
     predicateVerifier,

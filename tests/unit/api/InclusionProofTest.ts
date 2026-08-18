@@ -10,7 +10,6 @@ import { DataHash } from '../../../src/crypto/hash/DataHash.js';
 import { DataHasherFactory } from '../../../src/crypto/hash/DataHasherFactory.js';
 import { HashAlgorithm } from '../../../src/crypto/hash/HashAlgorithm.js';
 import { NodeDataHasher } from '../../../src/crypto/hash/NodeDataHasher.js';
-import { Secp256k1SignatureVerifier } from '../../../src/crypto/secp256k1/Secp256k1SignatureVerifier.js';
 import { SigningService } from '../../../src/crypto/secp256k1/SigningService.js';
 import { SignaturePredicate } from '../../../src/predicate/builtin/SignaturePredicate.js';
 import { EncodedPredicate } from '../../../src/predicate/EncodedPredicate.js';
@@ -25,6 +24,7 @@ import {
 import { HexConverter } from '../../../src/util/HexConverter.js';
 import { createRootTrustBase } from '../../utils/RootTrustBaseFixture.js';
 import { createUnicityCertificate } from '../../utils/UnicityCertificateFixture.js';
+import { createUnicityCertificateVerifier } from '../../utils/UnicityCertificateVerifierFixture.js';
 
 describe('InclusionProof', () => {
   const signingService = new SigningService(
@@ -54,7 +54,7 @@ describe('InclusionProof', () => {
     unicityCertificate = await createUnicityCertificate(root.hash, signingService);
     trustBase = createRootTrustBase(signingService.publicKey);
     predicateVerifier = PredicateVerifierService.create();
-    unicityCertificateVerifier = new UnicityCertificateVerifier(new Secp256k1SignatureVerifier());
+    unicityCertificateVerifier = createUnicityCertificateVerifier();
   });
 
   it('should encode and decode cbor', () => {
