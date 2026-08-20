@@ -26,9 +26,11 @@ export async function mintToken(
   tokenType: TokenType = TokenType.generate(),
   salt: TokenSalt = TokenSalt.generate(),
   justification: ICborSerializable | null = null,
+  expiresAt: bigint | null = null,
 ): Promise<Token> {
   const transaction = await MintTransaction.create(networkId, recipient, {
     data: data,
+    expiresAt: expiresAt,
     justification: justification?.toCBOR(),
     salt: salt,
     tokenType: tokenType,
