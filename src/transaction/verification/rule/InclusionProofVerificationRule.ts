@@ -41,7 +41,7 @@ export class InclusionProofVerificationRule {
    * @param {PredicateVerifierService} predicateVerifierFactory Predicate verifier service.
    * @param {InclusionProof} inclusionProof Inclusion proof to verify.
    * @param {DataHash} transactionHash Canonical hash of the transaction.
-   * @param {bigint|null} timeout Explicit timeout, or `null` for the service default.
+   * @param {bigint|null} expiresAt Exclusive request deadline, or `null` when the service assigned one.
    * @param {bigint} referenceTime Reference time the transition was validated under.
    * @param {EncodedPredicate} lockScript Lock script the transaction unlocks.
    * @param {DataHash} sourceStateHash Hash of the state the transaction spends.
@@ -53,7 +53,7 @@ export class InclusionProofVerificationRule {
     unicityCertificateVerifier: UnicityCertificateVerifier,
     inclusionProof: InclusionProof,
     transactionHash: DataHash,
-    timeout: bigint | null,
+    expiresAt: bigint | null,
     referenceTime: bigint,
     lockScript: EncodedPredicate,
     sourceStateHash: DataHash,
@@ -83,7 +83,7 @@ export class InclusionProofVerificationRule {
     if (
       !EncodedPredicate.equals(certificationData.lockScript, lockScript) ||
       !certificationData.sourceStateHash.equals(sourceStateHash) ||
-      certificationData.timeout !== timeout
+      certificationData.expiresAt !== expiresAt
     ) {
       return new VerificationResult(
         'InclusionProofVerificationRule',
@@ -91,8 +91,10 @@ export class InclusionProofVerificationRule {
       );
     }
 
-    // The request was admissible only in a round strictly before its timeout.
-    if (timeout != null && referenceTime >= timeout) {
+    // The request was admissible only in a round strictly before its deadline. A
+    // request that carried no deadline was admitted under a service-assigned one,
+    // which is not recorded and is not re-checked here.
+    if (expiresAt != null && referenceTime >= expiresAt) {
       return new VerificationResult('InclusionProofVerificationRule', InclusionProofVerificationStatus.REQUEST_EXPIRED);
     }
 

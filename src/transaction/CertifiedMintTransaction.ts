@@ -41,6 +41,13 @@ export class CertifiedMintTransaction implements ITransaction {
   }
 
   /**
+   * @returns {bigint|null} Exclusive request deadline of the inner transaction.
+   */
+  public get expiresAt(): bigint | null {
+    return this.transaction.expiresAt;
+  }
+
+  /**
    * @returns {Uint8Array|null} Mint justification bytes of the inner transaction.
    */
   public get justification(): Uint8Array | null {
@@ -87,13 +94,6 @@ export class CertifiedMintTransaction implements ITransaction {
    */
   public get stateMask(): StateMask {
     return this.transaction.stateMask;
-  }
-
-  /**
-   * @returns {bigint} Exclusive certification request timeout of the inner transaction.
-   */
-  public get timeout(): bigint | null {
-    return this.transaction.timeout;
   }
 
   /**
@@ -165,7 +165,7 @@ export class CertifiedMintTransaction implements ITransaction {
       unicityCertificateVerifier,
       inclusionProof,
       await transaction.calculateTransactionHash(),
-      transaction.timeout,
+      transaction.expiresAt,
       referenceTime,
       transaction.lockScript,
       transaction.sourceStateHash,

@@ -76,8 +76,8 @@ I --> J[End]
 
 A `Token` is a self-contained, CBOR-serializable record that bundles its genesis with an ordered transfer history:
 
-- `genesis`: a `CertifiedMintTransaction` (a `MintTransaction` plus its `InclusionProof`). The mint transaction carries `networkId`, `tokenId`, `tokenType`, `salt`, `recipient`, optional `justification`, optional `data`, and optionally a request timeout.
-- `transactions`: an ordered list of `CertifiedTransferTransaction` entries, each wrapping a `TransferTransaction` (recipient, state mask, optional data and timeout) with its `InclusionProof`.
+- `genesis`: a `CertifiedMintTransaction` (a `MintTransaction` plus its `InclusionProof`). The mint transaction carries `networkId`, `tokenId`, `tokenType`, `salt`, `recipient`, optional `justification`, optional `data`, and `expiresAt`, an exclusive request deadline in Unix seconds that is `null` when the Unicity Service assigns the deadline instead.
+- `transactions`: an ordered list of `CertifiedTransferTransaction` entries, each wrapping a `TransferTransaction` (recipient, state mask, optional data, and `expiresAt`) with its `InclusionProof`.
 
 See [`src/transaction/Token.ts`](./src/transaction/Token.ts) for the authoritative shape.
 

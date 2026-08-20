@@ -1,5 +1,6 @@
 import { CertifiedTransferTransaction } from './CertifiedTransferTransaction.js';
 import { ITransaction } from './ITransaction.js';
+import { ITransferOptions } from './ITransferOptions.js';
 import { StateMask } from './StateMask.js';
 import { Token } from './Token.js';
 import { RootTrustBase } from '../api/bft/RootTrustBase.js';
@@ -22,14 +23,15 @@ import { dedent } from '../util/StringUtils.js';
  */
 export class TransferTransaction implements ITransaction {
   public static readonly CBOR_TAG = 39045n;
-  private static readonly LEGACY_VERSION = 1n;
-  private static readonly TIMEOUT_VERSION = 2n;
+  /** The only accepted wire version. One version, one element count. */
+  public static readonly VERSION = 2n;
+  private static readonly FIELD_COUNT = 5;
 
   private constructor(
     public readonly sourceStateHash: DataHash,
     public readonly lockScript: EncodedPredicate,
     public readonly recipient: EncodedPredicate,
-    public readonly timeout: bigint | null,
+    public readonly expiresAt: bigint | null,
     private readonly _stateMask: StateMask,
     private readonly _data: Uint8Array | null,
   ) {}
@@ -49,65 +51,32 @@ export class TransferTransaction implements ITransaction {
   }
 
   /**
-   * @returns {bigint} Wire-format version of this transaction.
-   */
-  public get version(): bigint {
-    return this.timeout == null ? TransferTransaction.LEGACY_VERSION : TransferTransaction.TIMEOUT_VERSION;
-  }
-
-  /**
    * Create a TransferTransaction for the given token.
    *
    * @param {Token} token Token being transferred (last transaction is used as the source).
    * @param {IPredicate} recipient Predicate that will lock the new state.
    * @param {StateMask} stateMask State mask mixed into the new state hash.
-   * @param {Uint8Array|null} data Optional data payload.
+   * @param {ITransferOptions} options Optional data payload and request deadline.
    * @returns {Promise<TransferTransaction>} New transfer transaction.
    */
-  public static create(
-    token: Token,
-    recipient: IPredicate,
-    stateMask: StateMask,
-    data?: Uint8Array | null,
-  ): Promise<TransferTransaction>;
-  public static create(
-    token: Token,
-    recipient: IPredicate,
-    stateMask: StateMask,
-    timeout: bigint,
-    data?: Uint8Array | null,
-  ): Promise<TransferTransaction>;
   public static async create(
     token: Token,
     recipient: IPredicate,
     stateMask: StateMask,
-    dataOrTimeout: Uint8Array | bigint | null = null,
-    explicitData: Uint8Array | null = null,
+    options: ITransferOptions = {},
   ): Promise<TransferTransaction> {
-    const timeout = typeof dataOrTimeout === 'bigint' ? dataOrTimeout : null;
-    let data = timeout == null ? (dataOrTimeout as Uint8Array | null) : explicitData;
-    data = data ? new Uint8Array(data) : null;
+    const { expiresAt = null } = options;
+    const data = options.data ? new Uint8Array(options.data) : null;
 
     const transaction = token.latestTransaction;
     return new TransferTransaction(
       await transaction.calculateStateHash(),
       transaction.recipient,
       EncodedPredicate.fromPredicate(recipient),
-      timeout,
+      expiresAt,
       stateMask,
       data,
     );
-  }
-
-  /** Create a transfer transaction with an explicit exclusive request timeout. */
-  public static createWithTimeout(
-    token: Token,
-    recipient: IPredicate,
-    stateMask: StateMask,
-    timeout: bigint,
-    data: Uint8Array | null = null,
-  ): Promise<TransferTransaction> {
-    return TransferTransaction.create(token, recipient, stateMask, timeout, data);
   }
 
   /**
@@ -124,27 +93,16 @@ export class TransferTransaction implements ITransaction {
       throw new CborError(`Invalid CBOR tag for TransferTransaction: ${tag.tag}`);
     }
 
-    const data = CborDeserializer.decodeArray(tag.data);
+    const data = CborDeserializer.decodeArray(tag.data, TransferTransaction.FIELD_COUNT);
     const version = CborDeserializer.decodeUnsignedInteger(data[0]);
-    if (version === TransferTransaction.LEGACY_VERSION && data.length === 4) {
-      return TransferTransaction.create(
-        token,
-        EncodedPredicate.fromCBOR(data[1]),
-        StateMask.fromCBOR(data[2]),
-        CborDeserializer.decodeNullable(data[3], CborDeserializer.decodeByteString),
-      );
-    }
-    if (version !== TransferTransaction.TIMEOUT_VERSION || data.length !== 5) {
+    if (version !== TransferTransaction.VERSION) {
       throw new CborError(`Unsupported TransferTransaction version: ${version}`);
     }
 
-    return await TransferTransaction.createWithTimeout(
-      token,
-      EncodedPredicate.fromCBOR(data[1]),
-      StateMask.fromCBOR(data[2]),
-      CborDeserializer.decodeUnsignedInteger(data[4]),
-      CborDeserializer.decodeNullable(data[3], CborDeserializer.decodeByteString),
-    );
+    return await TransferTransaction.create(token, EncodedPredicate.fromCBOR(data[1]), StateMask.fromCBOR(data[2]), {
+      data: CborDeserializer.decodeNullable(data[3], CborDeserializer.decodeByteString),
+      expiresAt: CborDeserializer.decodeNullable(data[4], CborDeserializer.decodeUnsignedInteger),
+    });
   }
 
   /**
@@ -175,11 +133,11 @@ export class TransferTransaction implements ITransaction {
     return CborSerializer.encodeTag(
       TransferTransaction.CBOR_TAG,
       CborSerializer.encodeArray(
-        CborSerializer.encodeUnsignedInteger(this.version),
+        CborSerializer.encodeUnsignedInteger(TransferTransaction.VERSION),
         this.recipient.toCBOR(),
         this._stateMask.toCBOR(),
         CborSerializer.encodeNullable(this._data, CborSerializer.encodeByteString),
-        ...(this.timeout == null ? [] : [CborSerializer.encodeUnsignedInteger(this.timeout)]),
+        CborSerializer.encodeNullable(this.expiresAt, CborSerializer.encodeUnsignedInteger),
       ),
     );
   }
@@ -214,13 +172,13 @@ export class TransferTransaction implements ITransaction {
   public toString(): string {
     return dedent`
       TransferTransaction
-        Version: ${this.version.toString()}
+        Version: ${TransferTransaction.VERSION.toString()}
         Source State Hash: ${this.sourceStateHash.toString()}
         Lock Script: 
           ${this.lockScript.toString()}
         Recipient: ${this.recipient.toString()}
         StateMask: ${this._stateMask.toString()}
         Data: ${this._data ? HexConverter.encode(this._data) : 'null'}
-        Timeout: ${this.timeout?.toString() ?? 'service default'}`;
+        Expires At: ${this.expiresAt?.toString() ?? 'service assigned'}`;
   }
 }

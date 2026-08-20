@@ -3,6 +3,7 @@ import { TokenAssetCountMismatchError } from './error/TokenAssetCountMismatchErr
 import { TokenAssetMissingError } from './error/TokenAssetMissingError.js';
 import { TokenAssetValueMismatchError } from './error/TokenAssetValueMismatchError.js';
 import { IPaymentData } from './IPaymentData.js';
+import { ISplitOptions } from './ISplitOptions.js';
 import { SplitAllocationProof } from './SplitAllocationProof.js';
 import { SplitManifest } from './SplitManifest.js';
 import { SplitMintJustification } from './SplitMintJustification.js';
@@ -45,33 +46,16 @@ export class TokenSplit {
    * @param {Token} token Source token to split (the token being burned).
    * @param {(bytes: Uint8Array) => Promise<IPaymentData>} decodePaymentData Decoder for the source token's payment data.
    * @param {SplitTokenRequest[]} requests Per-output mint requests; each carries its own payment data.
-   * @param {StateMask} [burnStateMask] State mask for the burn transaction. Defaults to a random
-   *   value; callers needing a crash-resumable (re-buildable) split supply a deterministically
-   *   derived mask so the identical burn transaction can be reconstructed after a failure.
+   * @param {ISplitOptions} options Optional burn state mask and request deadline.
    * @returns {Promise<ISplit>} Burn transaction and split tokens ready to mint.
    */
-  public static split(
-    token: Token,
-    decodePaymentData: (bytes: Uint8Array) => Promise<IPaymentData>,
-    requests: SplitTokenRequest[],
-    burnStateMask?: StateMask,
-  ): Promise<ISplit>;
-  public static split(
-    token: Token,
-    decodePaymentData: (bytes: Uint8Array) => Promise<IPaymentData>,
-    requests: SplitTokenRequest[],
-    burnTimeout: bigint,
-    burnStateMask?: StateMask,
-  ): Promise<ISplit>;
   public static async split(
     token: Token,
     decodePaymentData: (bytes: Uint8Array) => Promise<IPaymentData>,
     requests: SplitTokenRequest[],
-    burnTimeoutOrStateMask: bigint | StateMask = StateMask.generate(),
-    explicitStateMask: StateMask = StateMask.generate(),
+    options: ISplitOptions = {},
   ): Promise<ISplit> {
-    const burnTimeout = typeof burnTimeoutOrStateMask === 'bigint' ? burnTimeoutOrStateMask : null;
-    const burnStateMask = (burnTimeout == null ? burnTimeoutOrStateMask : explicitStateMask) as StateMask;
+    const { burnStateMask = StateMask.generate(), expiresAt = null } = options;
     const factory = new DataHasherFactory(HashAlgorithm.SHA256, DataHasher);
 
     if (token.genesis.data == null) {
@@ -142,10 +126,10 @@ export class TokenSplit {
     const manifestBytes = SplitManifest.create(roots).toCBOR();
     const burnReason = (await new DataHasher(HashAlgorithm.SHA256).update(manifestBytes).digest()).data;
     const burnPredicate = BurnPredicate.create(burnReason);
-    const burnTransaction =
-      burnTimeout == null
-        ? await TransferTransaction.create(token, burnPredicate, burnStateMask, manifestBytes)
-        : await TransferTransaction.create(token, burnPredicate, burnStateMask, burnTimeout, manifestBytes);
+    const burnTransaction = await TransferTransaction.create(token, burnPredicate, burnStateMask, {
+      data: manifestBytes,
+      expiresAt,
+    });
 
     const tokens: SplitToken[] = [];
     for (let i = 0; i < requests.length; i++) {

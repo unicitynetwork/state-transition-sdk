@@ -18,7 +18,7 @@ import { MintTransaction } from '../../../src/transaction/MintTransaction.js';
 import { TokenSalt } from '../../../src/transaction/TokenSalt.js';
 import { TokenType } from '../../../src/transaction/TokenType.js';
 import { SleepError, waitInclusionProof } from '../../../src/util/InclusionProofUtils.js';
-import { requestTimeout } from '../../utils/RequestTimeout.js';
+import { expiresAt } from '../../utils/ExpiresAt.js';
 import { createRootTrustBase } from '../../utils/RootTrustBaseFixture.js';
 import { createUnicityCertificate } from '../../utils/UnicityCertificateFixture.js';
 import { createUnicityCertificateVerifier } from '../../utils/UnicityCertificateVerifierFixture.js';
@@ -72,15 +72,11 @@ describe('waitInclusionProof', () => {
   let pendingProof: InclusionProof;
 
   beforeAll(async () => {
-    transaction = await MintTransaction.create(
-      NetworkId.LOCAL,
-      SignaturePredicate.create(signingService.publicKey),
-      requestTimeout(),
-      null,
-      TokenType.generate(),
-      TokenSalt.generate(),
-      null,
-    );
+    transaction = await MintTransaction.create(NetworkId.LOCAL, SignaturePredicate.create(signingService.publicKey), {
+      expiresAt: expiresAt(),
+      salt: TokenSalt.generate(),
+      tokenType: TokenType.generate(),
+    });
     // A proof without an inclusion certificate is what the aggregator returns
     // for a state it has not certified yet, i.e. "keep polling".
     pendingProof = new InclusionProof(

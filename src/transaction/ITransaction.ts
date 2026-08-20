@@ -10,6 +10,13 @@ import { EncodedPredicate } from '../predicate/EncodedPredicate.js';
 export interface ITransaction {
   readonly data: Uint8Array | null;
 
+  /**
+   * Exclusive request deadline in Unix seconds, or `null` when the service
+   * assigns one from consensus time. It occupies a fixed position in the
+   * encoding and is committed by the transaction hash either way.
+   */
+  readonly expiresAt: bigint | null;
+
   readonly lockScript: EncodedPredicate;
 
   readonly recipient: EncodedPredicate;
@@ -17,13 +24,6 @@ export interface ITransaction {
   readonly sourceStateHash: DataHash;
 
   readonly stateMask: StateMask;
-
-  /**
-   * Explicit exclusive timeout of the certification request, or `null` to let
-   * the service derive one from consensus time. Explicit values are part of the
-   * v2 transaction encoding.
-   */
-  readonly timeout: bigint | null;
 
   /**
    * Compute the hash of the resulting state after applying this transaction.

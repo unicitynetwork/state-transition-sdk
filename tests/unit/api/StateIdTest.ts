@@ -5,7 +5,7 @@ import { MintTransaction } from '../../../src/transaction/MintTransaction.js';
 import { TokenSalt } from '../../../src/transaction/TokenSalt.js';
 import { TokenType } from '../../../src/transaction/TokenType.js';
 import { HexConverter } from '../../../src/util/HexConverter.js';
-import { requestTimeout } from '../../utils/RequestTimeout.js';
+import { expiresAt } from '../../utils/ExpiresAt.js';
 
 describe('StateId', () => {
   it('should encode and decode to exactly same object', async () => {
@@ -15,10 +15,11 @@ describe('StateId', () => {
         SignaturePredicate.create(
           HexConverter.decode('02ce9f22e51333c97a8fb1f807a229ece3a8765a16af5fc1a13e30834be3280026'),
         ),
-        requestTimeout(),
-        null,
-        new TokenType(new Uint8Array(32)),
-        TokenSalt.fromBytes(new Uint8Array(32)),
+        {
+          expiresAt: expiresAt(),
+          salt: TokenSalt.fromBytes(new Uint8Array(32)),
+          tokenType: new TokenType(new Uint8Array(32)),
+        },
       ),
     );
 

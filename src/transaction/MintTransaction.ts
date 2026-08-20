@@ -1,4 +1,5 @@
 import { CertifiedMintTransaction } from './CertifiedMintTransaction.js';
+import { IMintOptions } from './IMintOptions.js';
 import { ITransaction } from './ITransaction.js';
 import { MintTransactionState } from './MintTransactionState.js';
 import { StateMask } from './StateMask.js';
@@ -28,8 +29,9 @@ import { dedent } from '../util/StringUtils.js';
  */
 export class MintTransaction implements ITransaction {
   public static readonly CBOR_TAG = 39041n;
-  private static readonly LEGACY_VERSION = 1n;
-  private static readonly TIMEOUT_VERSION = 2n;
+  /** The only accepted wire version. One version, one element count. */
+  public static readonly VERSION = 2n;
+  private static readonly FIELD_COUNT = 8;
 
   private readonly _brand = 'MintTransaction' as const;
 
@@ -41,7 +43,7 @@ export class MintTransaction implements ITransaction {
     public readonly salt: TokenSalt,
     public readonly tokenType: TokenType,
     public readonly tokenId: TokenId,
-    public readonly timeout: bigint | null,
+    public readonly expiresAt: bigint | null,
     private readonly _justification: Uint8Array | null,
     private readonly _data: Uint8Array | null,
   ) {}
@@ -68,61 +70,21 @@ export class MintTransaction implements ITransaction {
   }
 
   /**
-   * @returns {bigint} Wire-format version of this transaction.
-   */
-  public get version(): bigint {
-    return this.timeout == null ? MintTransaction.LEGACY_VERSION : MintTransaction.TIMEOUT_VERSION;
-  }
-
-  /**
    * Create a MintTransaction for a fresh token.
    *
    * @param {NetworkId} networkId Network identifier.
    * @param {IPredicate} recipient Predicate that will lock the minted state.
-   * @param {Uint8Array|null} data Optional data payload.
-   * @param {TokenType} tokenType Token type being minted.
-   * @param {TokenSalt} salt Mint-transaction salt; defaults to a random 32-byte salt.
-   * @param {Uint8Array|null} justification Optional mint justification bytes.
+   * @param {IMintOptions} options Optional data, token type, salt, justification and request deadline.
    * @returns {Promise<MintTransaction>} New mint transaction.
    */
-  public static create(
-    networkId: NetworkId,
-    recipient: IPredicate,
-    data?: Uint8Array | null,
-    tokenType?: TokenType,
-    salt?: TokenSalt,
-    justification?: Uint8Array | null,
-  ): Promise<MintTransaction>;
-  public static create(
-    networkId: NetworkId,
-    recipient: IPredicate,
-    timeout: bigint,
-    data?: Uint8Array | null,
-    tokenType?: TokenType,
-    salt?: TokenSalt,
-    justification?: Uint8Array | null,
-  ): Promise<MintTransaction>;
   public static async create(
     networkId: NetworkId,
     recipient: IPredicate,
-    dataOrTimeout: Uint8Array | bigint | null = null,
-    tokenTypeOrData?: TokenType | Uint8Array | null,
-    saltOrTokenType?: TokenSalt | TokenType,
-    justificationOrSalt?: Uint8Array | TokenSalt | null,
-    explicitJustification: Uint8Array | null = null,
+    options: IMintOptions = {},
   ): Promise<MintTransaction> {
-    const explicitTimeout = typeof dataOrTimeout === 'bigint' ? dataOrTimeout : null;
-    let data = explicitTimeout == null ? (dataOrTimeout as Uint8Array | null) : (tokenTypeOrData as Uint8Array | null);
-    const tokenType =
-      ((explicitTimeout == null ? tokenTypeOrData : saltOrTokenType) as TokenType | undefined) ?? TokenType.generate();
-    const salt =
-      ((explicitTimeout == null ? saltOrTokenType : justificationOrSalt) as TokenSalt | undefined) ??
-      TokenSalt.generate();
-    let justification =
-      explicitTimeout == null ? (justificationOrSalt as Uint8Array | null | undefined) : explicitJustification;
-    justification ??= null;
-    justification = justification ? new Uint8Array(justification) : null;
-    data = data ? new Uint8Array(data) : null;
+    const { tokenType = TokenType.generate(), salt = TokenSalt.generate(), expiresAt = null } = options;
+    const justification = options.justification ? new Uint8Array(options.justification) : null;
+    const data = options.data ? new Uint8Array(options.data) : null;
 
     const tokenId = await TokenId.fromSalt(networkId, salt);
     const signingService = await MintSigningService.create(tokenId);
@@ -134,23 +96,10 @@ export class MintTransaction implements ITransaction {
       salt,
       tokenType,
       tokenId,
-      explicitTimeout,
+      expiresAt,
       justification,
       data,
     );
-  }
-
-  /** Create a mint transaction with an explicit exclusive request timeout. */
-  public static createWithTimeout(
-    networkId: NetworkId,
-    recipient: IPredicate,
-    timeout: bigint,
-    data: Uint8Array | null = null,
-    tokenType: TokenType = TokenType.generate(),
-    salt: TokenSalt = TokenSalt.generate(),
-    justification: Uint8Array | null = null,
-  ): Promise<MintTransaction> {
-    return MintTransaction.create(networkId, recipient, timeout, data, tokenType, salt, justification);
   }
 
   /**
@@ -166,30 +115,22 @@ export class MintTransaction implements ITransaction {
       throw new CborError(`Invalid CBOR tag for MintTransaction: ${tag.tag}`);
     }
 
-    const data = CborDeserializer.decodeArray(tag.data);
+    const data = CborDeserializer.decodeArray(tag.data, MintTransaction.FIELD_COUNT);
     const version = CborDeserializer.decodeUnsignedInteger(data[0]);
-    if (version === MintTransaction.LEGACY_VERSION && data.length === 7) {
-      return MintTransaction.create(
-        NetworkId.fromId(CborDeserializer.decodeUnsignedInteger(data[1])),
-        EncodedPredicate.fromCBOR(data[2]),
-        CborDeserializer.decodeNullable(data[6], CborDeserializer.decodeByteString),
-        TokenType.fromCBOR(data[4]),
-        TokenSalt.fromCBOR(data[3]),
-        CborDeserializer.decodeNullable(data[5], CborDeserializer.decodeByteString),
-      );
-    }
-    if (version !== MintTransaction.TIMEOUT_VERSION || data.length !== 8) {
+    if (version !== MintTransaction.VERSION) {
       throw new CborError(`Unsupported MintTransaction version: ${version}`);
     }
 
-    return await MintTransaction.createWithTimeout(
+    return await MintTransaction.create(
       NetworkId.fromId(CborDeserializer.decodeUnsignedInteger(data[1])),
       EncodedPredicate.fromCBOR(data[2]),
-      CborDeserializer.decodeUnsignedInteger(data[7]),
-      CborDeserializer.decodeNullable(data[6], CborDeserializer.decodeByteString),
-      TokenType.fromCBOR(data[4]),
-      TokenSalt.fromCBOR(data[3]),
-      CborDeserializer.decodeNullable(data[5], CborDeserializer.decodeByteString),
+      {
+        data: CborDeserializer.decodeNullable(data[6], CborDeserializer.decodeByteString),
+        expiresAt: CborDeserializer.decodeNullable(data[7], CborDeserializer.decodeUnsignedInteger),
+        justification: CborDeserializer.decodeNullable(data[5], CborDeserializer.decodeByteString),
+        salt: TokenSalt.fromCBOR(data[3]),
+        tokenType: TokenType.fromCBOR(data[4]),
+      },
     );
   }
 
@@ -221,14 +162,14 @@ export class MintTransaction implements ITransaction {
     return CborSerializer.encodeTag(
       MintTransaction.CBOR_TAG,
       CborSerializer.encodeArray(
-        CborSerializer.encodeUnsignedInteger(this.version),
+        CborSerializer.encodeUnsignedInteger(MintTransaction.VERSION),
         CborSerializer.encodeUnsignedInteger(this.networkId.id),
         this.recipient.toCBOR(),
         this.salt.toCBOR(),
         this.tokenType.toCBOR(),
         CborSerializer.encodeNullable(this._justification, CborSerializer.encodeByteString),
         CborSerializer.encodeNullable(this._data, CborSerializer.encodeByteString),
-        ...(this.timeout == null ? [] : [CborSerializer.encodeUnsignedInteger(this.timeout)]),
+        CborSerializer.encodeNullable(this.expiresAt, CborSerializer.encodeUnsignedInteger),
       ),
     );
   }
@@ -263,7 +204,7 @@ export class MintTransaction implements ITransaction {
   public toString(): string {
     return dedent`
       MintTransaction
-        Version: ${this.version.toString()}
+        Version: ${MintTransaction.VERSION.toString()}
         Network ID: ${this.networkId.toString()}
         Lock Script:
           ${this.lockScript.toString()}
@@ -273,6 +214,6 @@ export class MintTransaction implements ITransaction {
         Token Type: ${this.tokenType.toString()}
         Mint Justification: ${this._justification ? HexConverter.encode(this._justification) : 'null'}
         Data: ${this._data ? HexConverter.encode(this._data) : 'null'}
-        Timeout: ${this.timeout?.toString() ?? 'service default'}`;
+        Expires At: ${this.expiresAt?.toString() ?? 'service assigned'}`;
   }
 }

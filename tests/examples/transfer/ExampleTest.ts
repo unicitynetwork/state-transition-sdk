@@ -40,12 +40,10 @@ async function receiveToken(client: StateTransitionClient, trustBase: RootTrustB
   const ownerSigningService = new SigningService(ownerPrivateKey);
   const ownerPredicate = SignaturePredicate.fromSigningService(ownerSigningService);
 
-  const mintTransaction = await MintTransaction.create(
-    NetworkId.LOCAL,
-    ownerPredicate,
-    CborSerializer.encodeTextString('My custom data'),
-    TokenType.generate(),
-  );
+  const mintTransaction = await MintTransaction.create(NetworkId.LOCAL, ownerPredicate, {
+    data: CborSerializer.encodeTextString('My custom data'),
+    tokenType: TokenType.generate(),
+  });
   const certificationData = await CertificationData.fromMintTransaction(mintTransaction);
 
   await client.submitCertificationRequest(certificationData);
@@ -90,12 +88,9 @@ it('Token transfer', async () => {
 
   const recipient = EncodedPredicate.fromCBOR(HexConverter.decode(config.address));
 
-  const transferTransaction = await TransferTransaction.create(
-    token,
-    recipient,
-    StateMask.generate(),
-    CborSerializer.encodeTextString('My custom transfer data'),
-  );
+  const transferTransaction = await TransferTransaction.create(token, recipient, StateMask.generate(), {
+    data: CborSerializer.encodeTextString('My custom transfer data'),
+  });
 
   const certificationData = await CertificationData.fromTransaction(
     transferTransaction,

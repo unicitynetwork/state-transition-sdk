@@ -39,12 +39,10 @@ it('Token minting', async () => {
   const ownerSigningService = new SigningService(ownerPrivateKey);
   const ownerPredicate = SignaturePredicate.fromSigningService(ownerSigningService);
 
-  const mintTransaction = await MintTransaction.create(
-    NetworkId.LOCAL,
-    ownerPredicate,
-    CborSerializer.encodeTextString('My custom data'),
-    TokenType.generate(),
-  );
+  const mintTransaction = await MintTransaction.create(NetworkId.LOCAL, ownerPredicate, {
+    data: CborSerializer.encodeTextString('My custom data'),
+    tokenType: TokenType.generate(),
+  });
   const certificationData = await CertificationData.fromMintTransaction(mintTransaction);
 
   await client.submitCertificationRequest(certificationData);

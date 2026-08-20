@@ -59,12 +59,10 @@ it('Token splitting', async () => {
 
   const paymentData = new CustomPaymentData(PaymentAssetCollection.create(...assets), 'my other data');
   const networkId = NetworkId.LOCAL;
-  const mintTransaction = await MintTransaction.create(
-    networkId,
-    ownerPredicate,
-    await paymentData.encode(),
-    TokenType.generate(),
-  );
+  const mintTransaction = await MintTransaction.create(networkId, ownerPredicate, {
+    data: await paymentData.encode(),
+    tokenType: TokenType.generate(),
+  });
 
   let response = await client.submitCertificationRequest(await CertificationData.fromMintTransaction(mintTransaction));
   if (response.status !== String(CertificationStatus.SUCCESS)) {
@@ -136,14 +134,12 @@ it('Token splitting', async () => {
 
   let i = 1;
   for (const splitToken of result.tokens) {
-    const mintTransaction = await MintTransaction.create(
-      splitToken.networkId,
-      splitToken.recipient,
-      await splitToken.paymentData.encode(),
-      splitToken.tokenType,
-      splitToken.salt,
-      SplitMintJustification.create(burntToken, splitToken.proofs).toCBOR(),
-    );
+    const mintTransaction = await MintTransaction.create(splitToken.networkId, splitToken.recipient, {
+      data: await splitToken.paymentData.encode(),
+      justification: SplitMintJustification.create(burntToken, splitToken.proofs).toCBOR(),
+      salt: splitToken.salt,
+      tokenType: splitToken.tokenType,
+    });
 
     const certificationData = await CertificationData.fromMintTransaction(mintTransaction);
 

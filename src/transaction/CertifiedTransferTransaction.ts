@@ -36,6 +36,13 @@ export class CertifiedTransferTransaction implements ITransaction {
   }
 
   /**
+   * @returns {bigint|null} Exclusive request deadline of the inner transaction.
+   */
+  public get expiresAt(): bigint | null {
+    return this.transaction.expiresAt;
+  }
+
+  /**
    * @returns {EncodedPredicate} Lock script of the inner transaction.
    */
   public get lockScript(): EncodedPredicate {
@@ -61,13 +68,6 @@ export class CertifiedTransferTransaction implements ITransaction {
    */
   public get stateMask(): StateMask {
     return this.transaction.stateMask;
-  }
-
-  /**
-   * @returns {bigint} Exclusive certification request timeout of the inner transaction.
-   */
-  public get timeout(): bigint | null {
-    return this.transaction.timeout;
   }
 
   /**
@@ -126,7 +126,7 @@ export class CertifiedTransferTransaction implements ITransaction {
       unicityCertificateVerifier,
       inclusionProof,
       await transaction.calculateTransactionHash(),
-      transaction.timeout,
+      transaction.expiresAt,
       referenceTime,
       transaction.lockScript,
       transaction.sourceStateHash,

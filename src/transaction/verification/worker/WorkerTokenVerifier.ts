@@ -139,7 +139,7 @@ class WorkerTransferTransaction {
     private readonly bytes: Uint8Array,
     public readonly sourceStateHash: DataHash,
     public readonly lockScript: EncodedPredicate,
-    public readonly timeout: bigint | null,
+    public readonly expiresAt: bigint | null,
     public readonly referenceTime: bigint,
     public readonly inclusionProof: InclusionProof,
   ) {}
@@ -181,7 +181,7 @@ class WorkerTransferTransaction {
       transaction.toCBOR(),
       CborSerializer.encodeByteString(transaction.sourceStateHash.imprint),
       transaction.lockScript.toCBOR(),
-      CborSerializer.encodeNullable(transaction.timeout, CborSerializer.encodeUnsignedInteger),
+      CborSerializer.encodeNullable(transaction.expiresAt, CborSerializer.encodeUnsignedInteger),
     );
   }
 
@@ -214,7 +214,7 @@ class WorkerTransferTransaction {
       unicityCertificateVerifier,
       this.inclusionProof,
       await this.calculateTransactionHash(),
-      this.timeout,
+      this.expiresAt,
       this.referenceTime,
       this.lockScript,
       this.sourceStateHash,

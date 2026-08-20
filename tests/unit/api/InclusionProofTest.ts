@@ -23,7 +23,7 @@ import {
   InclusionProofVerificationStatus,
 } from '../../../src/transaction/verification/rule/InclusionProofVerificationRule.js';
 import { HexConverter } from '../../../src/util/HexConverter.js';
-import { requestTimeout } from '../../utils/RequestTimeout.js';
+import { expiresAt } from '../../utils/ExpiresAt.js';
 import { createRootTrustBase } from '../../utils/RootTrustBaseFixture.js';
 import { createUnicityCertificate } from '../../utils/UnicityCertificateFixture.js';
 import { createUnicityCertificateVerifier } from '../../utils/UnicityCertificateVerifierFixture.js';
@@ -43,11 +43,9 @@ describe('InclusionProof', () => {
   let trustBase: RootTrustBase;
 
   beforeAll(async () => {
-    transaction = await MintTransaction.create(
-      NetworkId.LOCAL,
-      SignaturePredicate.fromSigningService(signingService),
-      requestTimeout(),
-    );
+    transaction = await MintTransaction.create(NetworkId.LOCAL, SignaturePredicate.fromSigningService(signingService), {
+      expiresAt: expiresAt(),
+    });
     const smt = new SparseMerkleTree(new DataHasherFactory(HashAlgorithm.SHA256, NodeDataHasher));
     const stateId = await StateId.fromTransaction(transaction);
     certificationData = await CertificationData.fromMintTransaction(transaction);
@@ -88,7 +86,7 @@ describe('InclusionProof', () => {
         unicityCertificateVerifier,
         new InclusionProof(certificationData, REFERENCE_TIME, inclusionCertificate, unicityCertificate),
         transactionHash,
-        transaction.timeout,
+        transaction.expiresAt,
         REFERENCE_TIME,
         transaction.lockScript,
         transaction.sourceStateHash,
@@ -102,7 +100,7 @@ describe('InclusionProof', () => {
         unicityCertificateVerifier,
         new InclusionProof(certificationData, REFERENCE_TIME, null, unicityCertificate),
         transactionHash,
-        transaction.timeout,
+        transaction.expiresAt,
         REFERENCE_TIME,
         transaction.lockScript,
         transaction.sourceStateHash,
@@ -124,7 +122,7 @@ describe('InclusionProof', () => {
                 HexConverter.decode('00000000000000000000000000000000000000000000000000000000000000000001'),
               ).data,
             ),
-            CborSerializer.encodeUnsignedInteger(certificationData.timeout!),
+            CborSerializer.encodeUnsignedInteger(certificationData.expiresAt!),
             CborSerializer.encodeByteString(certificationData.unlockScript),
           ),
         ),
@@ -140,7 +138,7 @@ describe('InclusionProof', () => {
         unicityCertificateVerifier,
         invalidTransactionHashInclusionProof,
         await transaction.calculateTransactionHash(),
-        transaction.timeout,
+        transaction.expiresAt,
         REFERENCE_TIME,
         transaction.lockScript,
         transaction.sourceStateHash,
@@ -158,7 +156,7 @@ describe('InclusionProof', () => {
             EncodedPredicate.fromPredicate(certificationData.lockScript).toCBOR(),
             CborSerializer.encodeByteString(certificationData.sourceStateHash.data),
             CborSerializer.encodeByteString(certificationData.transactionHash.data),
-            CborSerializer.encodeUnsignedInteger(certificationData.timeout!),
+            CborSerializer.encodeUnsignedInteger(certificationData.expiresAt!),
             CborSerializer.encodeByteString(new Uint8Array(65)),
           ),
         ),
@@ -175,7 +173,7 @@ describe('InclusionProof', () => {
         unicityCertificateVerifier,
         inclusionProof,
         await transaction.calculateTransactionHash(),
-        transaction.timeout,
+        transaction.expiresAt,
         REFERENCE_TIME,
         transaction.lockScript,
         transaction.sourceStateHash,
@@ -198,7 +196,7 @@ describe('InclusionProof', () => {
         unicityCertificateVerifier,
         inclusionProof,
         await transaction.calculateTransactionHash(),
-        transaction.timeout,
+        transaction.expiresAt,
         REFERENCE_TIME + 1n,
         transaction.lockScript,
         transaction.sourceStateHash,
@@ -221,8 +219,8 @@ describe('InclusionProof', () => {
         unicityCertificateVerifier,
         inclusionProof,
         await transaction.calculateTransactionHash(),
-        transaction.timeout,
-        transaction.timeout!,
+        transaction.expiresAt,
+        transaction.expiresAt!,
         transaction.lockScript,
         transaction.sourceStateHash,
       ).then((result) => result.status),
@@ -244,7 +242,7 @@ describe('InclusionProof', () => {
         unicityCertificateVerifier,
         inclusionProof,
         await transaction.calculateTransactionHash(),
-        transaction.timeout,
+        transaction.expiresAt,
         REFERENCE_TIME,
         transaction.lockScript,
         transaction.sourceStateHash,

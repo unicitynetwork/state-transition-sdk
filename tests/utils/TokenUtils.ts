@@ -27,14 +27,12 @@ export async function mintToken(
   salt: TokenSalt = TokenSalt.generate(),
   justification: ICborSerializable | null = null,
 ): Promise<Token> {
-  const transaction = await MintTransaction.create(
-    networkId,
-    recipient,
-    data,
-    tokenType,
-    salt,
-    justification?.toCBOR(),
-  );
+  const transaction = await MintTransaction.create(networkId, recipient, {
+    data: data,
+    justification: justification?.toCBOR(),
+    salt: salt,
+    tokenType: tokenType,
+  });
 
   const certificationData = await CertificationData.fromMintTransaction(transaction);
 
