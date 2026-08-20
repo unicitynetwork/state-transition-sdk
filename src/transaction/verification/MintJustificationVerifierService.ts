@@ -1,9 +1,9 @@
-import { CertifiedMintTransaction } from '../CertifiedMintTransaction.js';
-import type { Token } from '../Token.js';
 import { IMintJustificationVerifier } from './IMintJustificationVerifier.js';
 import { CborDeserializer } from '../../serialization/cbor/CborDeserializer.js';
 import { VerificationResult } from '../../verification/VerificationResult.js';
 import { VerificationStatus } from '../../verification/VerificationStatus.js';
+import { CertifiedMintTransaction } from '../CertifiedMintTransaction.js';
+import type { Token } from '../Token.js';
 
 /**
  * Registry that dispatches mint justification verification to the right
