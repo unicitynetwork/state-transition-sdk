@@ -22,9 +22,6 @@ import { createUnicityCertificate } from '../utils/UnicityCertificateFixture.js'
  * Test aggregator client implementation that stores all submitted certification requests in memory.
  */
 export class TestAggregatorClient implements IAggregatorClient {
-  /** Reference time the first round runs under. */
-  private static readonly FIRST_REFERENCE_TIME = 1755000000n;
-
   public readonly rootTrustBase: RootTrustBase;
   private readonly predicateVerifier: PredicateVerifierService;
   /**
@@ -33,7 +30,7 @@ export class TestAggregatorClient implements IAggregatorClient {
    * input record time is past the one the leaf was built from, exactly as it
    * is against a live aggregator.
    */
-  private referenceTime: bigint = TestAggregatorClient.FIRST_REFERENCE_TIME;
+  private referenceTime: bigint = BigInt(Math.floor(Date.now() / 1000));
   private readonly requests: Map<bigint, { certificationData: CertificationData; referenceTime: bigint }> = new Map();
 
   private constructor(
@@ -98,6 +95,10 @@ export class TestAggregatorClient implements IAggregatorClient {
 
     if (result.status !== VerificationStatus.OK) {
       return CertificationResponse.create(CertificationStatus.SIGNATURE_VERIFICATION_FAILED);
+    }
+
+    if (this.referenceTime >= certificationData.timeout) {
+      return CertificationResponse.create(CertificationStatus.REQUEST_EXPIRED);
     }
 
     const path = BitString.fromBytesBigEndian(stateId.data).toBigInt();

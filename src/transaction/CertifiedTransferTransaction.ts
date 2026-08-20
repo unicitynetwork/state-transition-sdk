@@ -64,6 +64,13 @@ export class CertifiedTransferTransaction implements ITransaction {
   }
 
   /**
+   * @returns {bigint} Exclusive certification request timeout of the inner transaction.
+   */
+  public get timeout(): bigint {
+    return this.transaction.timeout;
+  }
+
+  /**
    * Create CertifiedTransferTransaction from CBOR bytes.
    *
    * @param {Uint8Array} bytes CBOR bytes.
@@ -118,6 +125,7 @@ export class CertifiedTransferTransaction implements ITransaction {
       unicityCertificateVerifier,
       inclusionProof,
       await transaction.calculateTransactionHash(),
+      transaction.timeout,
       referenceTime,
       transaction.lockScript,
       transaction.sourceStateHash,

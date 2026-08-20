@@ -79,6 +79,8 @@ A `Token` is a self-contained, CBOR-serializable record that bundles its genesis
 - `genesis`: a `CertifiedMintTransaction` (a `MintTransaction` plus the reference time it was certified under and its `InclusionProof`). The mint transaction carries `networkId`, `tokenId`, `tokenType`, `salt`, `recipient`, optional `justification`, and optional `data`.
 - `transactions`: an ordered list of `CertifiedTransferTransaction` entries, each wrapping a `TransferTransaction` (recipient, state mask, optional data) with its reference time and `InclusionProof`.
 
+Every transaction carries an exclusive certification request timeout. The Unicity Service admits the request only in a round whose reference time is strictly below it, and the timeout is part of the transaction encoding, so the transaction hash commits to it and the unlock script signs it. An expired request is rejected rather than certified late.
+
 Each certified transaction carries the reference time of the round it was validated in. The aggregator's sparse Merkle tree stores `SHA-256(CBOR([transactionHash, referenceTime]))` as the leaf value, so the reference time is a property of the leaf rather than of whichever proof happens to establish it. The tree is append-only, and a proof fetched later is anchored to a later root whose input record carries a later time; verification uses the carried reference time and rejects any value that does not reproduce the certified leaf.
 
 See [`src/transaction/Token.ts`](./src/transaction/Token.ts) for the authoritative shape.

@@ -25,6 +25,7 @@ import { TokenIssuanceVerifierService } from '../../../src/transaction/verificat
 import { VerificationContext } from '../../../src/transaction/verification/VerificationContext.js';
 import { HexConverter } from '../../../src/util/HexConverter.js';
 import { waitInclusionProof } from '../../../src/util/InclusionProofUtils.js';
+import { requestTimeout } from '../../utils/RequestTimeout.js';
 import { createUnicityCertificateVerifier } from '../../utils/UnicityCertificateVerifierFixture.js';
 import trustBaseJson from '../trust-base.json' with { type: 'json' };
 
@@ -62,6 +63,7 @@ it('Token splitting', async () => {
   const mintTransaction = await MintTransaction.create(
     networkId,
     ownerPredicate,
+    requestTimeout(),
     await paymentData.encode(),
     TokenType.generate(),
   );
@@ -105,7 +107,7 @@ it('Token splitting', async () => {
     ),
   ];
 
-  const result = await TokenSplit.split(token, CustomPaymentData.decode, requests);
+  const result = await TokenSplit.split(token, CustomPaymentData.decode, requests, requestTimeout());
 
   response = await client.submitCertificationRequest(
     await CertificationData.fromTransaction(
@@ -139,6 +141,7 @@ it('Token splitting', async () => {
     const mintTransaction = await MintTransaction.create(
       splitToken.networkId,
       splitToken.recipient,
+      requestTimeout(),
       await splitToken.paymentData.encode(),
       splitToken.tokenType,
       splitToken.salt,

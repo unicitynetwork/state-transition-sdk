@@ -22,6 +22,7 @@ import { VerificationContext } from '../../../src/transaction/verification/Verif
 import { HexConverter } from '../../../src/util/HexConverter.js';
 import { waitInclusionProof } from '../../../src/util/InclusionProofUtils.js';
 import { VerificationStatus } from '../../../src/verification/VerificationStatus.js';
+import { requestTimeout } from '../../utils/RequestTimeout.js';
 import { createUnicityCertificateVerifier } from '../../utils/UnicityCertificateVerifierFixture.js';
 import trustBaseJson from '../trust-base.json' with { type: 'json' };
 
@@ -43,6 +44,7 @@ async function receiveToken(client: StateTransitionClient, trustBase: RootTrustB
   const mintTransaction = await MintTransaction.create(
     NetworkId.LOCAL,
     ownerPredicate,
+    requestTimeout(),
     CborSerializer.encodeTextString('My custom data'),
     TokenType.generate(),
   );
@@ -94,6 +96,7 @@ it('Token transfer', async () => {
     token,
     recipient,
     StateMask.generate(),
+    requestTimeout(),
     CborSerializer.encodeTextString('My custom transfer data'),
   );
 

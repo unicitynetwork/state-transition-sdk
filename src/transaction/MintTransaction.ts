@@ -40,6 +40,7 @@ export class MintTransaction implements ITransaction {
     public readonly salt: TokenSalt,
     public readonly tokenType: TokenType,
     public readonly tokenId: TokenId,
+    public readonly timeout: bigint,
     private readonly _justification: Uint8Array | null,
     private readonly _data: Uint8Array | null,
   ) {}
@@ -77,6 +78,7 @@ export class MintTransaction implements ITransaction {
    *
    * @param {NetworkId} networkId Network identifier.
    * @param {IPredicate} recipient Predicate that will lock the minted state.
+   * @param {bigint} timeout Exclusive timeout of the certification request.
    * @param {Uint8Array|null} data Optional data payload.
    * @param {TokenType} tokenType Token type being minted.
    * @param {TokenSalt} salt Mint-transaction salt; defaults to a random 32-byte salt.
@@ -86,6 +88,7 @@ export class MintTransaction implements ITransaction {
   public static async create(
     networkId: NetworkId,
     recipient: IPredicate,
+    timeout: bigint,
     data: Uint8Array | null = null,
     tokenType: TokenType = TokenType.generate(),
     salt: TokenSalt = TokenSalt.generate(),
@@ -104,6 +107,7 @@ export class MintTransaction implements ITransaction {
       salt,
       tokenType,
       tokenId,
+      timeout,
       justification,
       data,
     );
@@ -122,7 +126,7 @@ export class MintTransaction implements ITransaction {
       throw new CborError(`Invalid CBOR tag for MintTransaction: ${tag.tag}`);
     }
 
-    const data = CborDeserializer.decodeArray(tag.data, 7);
+    const data = CborDeserializer.decodeArray(tag.data, 8);
     const version = CborDeserializer.decodeUnsignedInteger(data[0]);
     if (version !== MintTransaction.VERSION) {
       throw new CborError(`Unsupported MintTransaction version: ${version}`);
@@ -131,6 +135,7 @@ export class MintTransaction implements ITransaction {
     return MintTransaction.create(
       NetworkId.fromId(CborDeserializer.decodeUnsignedInteger(data[1])),
       EncodedPredicate.fromCBOR(data[2]),
+      CborDeserializer.decodeUnsignedInteger(data[7]),
       CborDeserializer.decodeNullable(data[6], CborDeserializer.decodeByteString),
       TokenType.fromCBOR(data[4]),
       TokenSalt.fromCBOR(data[3]),
@@ -173,6 +178,7 @@ export class MintTransaction implements ITransaction {
         this.tokenType.toCBOR(),
         CborSerializer.encodeNullable(this._justification, CborSerializer.encodeByteString),
         CborSerializer.encodeNullable(this._data, CborSerializer.encodeByteString),
+        CborSerializer.encodeUnsignedInteger(this.timeout),
       ),
     );
   }
@@ -216,6 +222,7 @@ export class MintTransaction implements ITransaction {
         Token ID: ${this.tokenId.toString()}
         Token Type: ${this.tokenType.toString()}
         Mint Justification: ${this._justification ? HexConverter.encode(this._justification) : 'null'}
-        Data: ${this._data ? HexConverter.encode(this._data) : 'null'}`;
+        Data: ${this._data ? HexConverter.encode(this._data) : 'null'}
+        Timeout: ${this.timeout.toString()}`;
   }
 }

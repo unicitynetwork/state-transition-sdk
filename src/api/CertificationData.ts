@@ -24,12 +24,14 @@ export class CertificationData {
    * @param {IPredicate} lockScript
    * @param {DataHash} sourceStateHash
    * @param {DataHash} transactionHash
+   * @param {bigint} timeout Exclusive request timeout
    * @param {Uint8Array} _unlockScript Unlock script bytes
    */
   private constructor(
     public readonly lockScript: EncodedPredicate,
     public readonly sourceStateHash: DataHash,
     public readonly transactionHash: DataHash,
+    public readonly timeout: bigint,
     private readonly _unlockScript: Uint8Array,
   ) {
     this._unlockScript = new Uint8Array(_unlockScript);
@@ -61,7 +63,7 @@ export class CertificationData {
       throw new CborError(`Invalid CBOR tag for CertificationData: ${tag.tag}`);
     }
 
-    const data = CborDeserializer.decodeArray(tag.data, 5);
+    const data = CborDeserializer.decodeArray(tag.data, 6);
     const version = CborDeserializer.decodeUnsignedInteger(data[0]);
     if (version !== CertificationData.VERSION) {
       throw new CborError(`Unsupported CertificationData version: ${version}`);
@@ -71,7 +73,8 @@ export class CertificationData {
       EncodedPredicate.fromCBOR(data[1]),
       new DataHash(HashAlgorithm.SHA256, CborDeserializer.decodeByteString(data[2])),
       new DataHash(HashAlgorithm.SHA256, CborDeserializer.decodeByteString(data[3])),
-      CborDeserializer.decodeByteString(data[4]),
+      CborDeserializer.decodeUnsignedInteger(data[4]),
+      CborDeserializer.decodeByteString(data[5]),
     );
   }
 
@@ -107,6 +110,7 @@ export class CertificationData {
       transaction.lockScript,
       transaction.sourceStateHash,
       transactionHash,
+      transaction.timeout,
       unlockScript.encode(),
     );
   }
@@ -124,6 +128,7 @@ export class CertificationData {
         this.lockScript.toCBOR(),
         CborSerializer.encodeByteString(this.sourceStateHash.data),
         CborSerializer.encodeByteString(this.transactionHash.data),
+        CborSerializer.encodeUnsignedInteger(this.timeout),
         CborSerializer.encodeByteString(this._unlockScript),
       ),
     );
@@ -141,6 +146,7 @@ export class CertificationData {
           ${this.lockScript.toString()}
         Source State Hash: ${this.sourceStateHash.toString()}
         Transaction Hash: ${this.transactionHash.toString()}
+        Timeout: ${this.timeout.toString()}
         Witness: ${HexConverter.encode(this._unlockScript)}`;
   }
 }

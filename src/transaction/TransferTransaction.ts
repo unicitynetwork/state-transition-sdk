@@ -28,6 +28,7 @@ export class TransferTransaction implements ITransaction {
     public readonly sourceStateHash: DataHash,
     public readonly lockScript: EncodedPredicate,
     public readonly recipient: EncodedPredicate,
+    public readonly timeout: bigint,
     private readonly _stateMask: StateMask,
     private readonly _data: Uint8Array | null,
   ) {}
@@ -59,6 +60,7 @@ export class TransferTransaction implements ITransaction {
    * @param {Token} token Token being transferred (last transaction is used as the source).
    * @param {IPredicate} recipient Predicate that will lock the new state.
    * @param {StateMask} stateMask State mask mixed into the new state hash.
+   * @param {bigint} timeout Exclusive timeout of the certification request.
    * @param {Uint8Array|null} data Optional data payload.
    * @returns {Promise<TransferTransaction>} New transfer transaction.
    */
@@ -66,6 +68,7 @@ export class TransferTransaction implements ITransaction {
     token: Token,
     recipient: IPredicate,
     stateMask: StateMask,
+    timeout: bigint,
     data: Uint8Array | null = null,
   ): Promise<TransferTransaction> {
     data = data ? new Uint8Array(data) : null;
@@ -75,6 +78,7 @@ export class TransferTransaction implements ITransaction {
       await transaction.calculateStateHash(),
       transaction.recipient,
       EncodedPredicate.fromPredicate(recipient),
+      timeout,
       stateMask,
       data,
     );
@@ -94,7 +98,7 @@ export class TransferTransaction implements ITransaction {
       throw new CborError(`Invalid CBOR tag for TransferTransaction: ${tag.tag}`);
     }
 
-    const data = CborDeserializer.decodeArray(tag.data, 4);
+    const data = CborDeserializer.decodeArray(tag.data, 5);
     const version = CborDeserializer.decodeUnsignedInteger(data[0]);
     if (version !== TransferTransaction.VERSION) {
       throw new CborError(`Unsupported TransferTransaction version: ${version}`);
@@ -104,6 +108,7 @@ export class TransferTransaction implements ITransaction {
       token,
       EncodedPredicate.fromCBOR(data[1]),
       StateMask.fromCBOR(data[2]),
+      CborDeserializer.decodeUnsignedInteger(data[4]),
       CborDeserializer.decodeNullable(data[3], CborDeserializer.decodeByteString),
     );
   }
@@ -140,6 +145,7 @@ export class TransferTransaction implements ITransaction {
         this.recipient.toCBOR(),
         this._stateMask.toCBOR(),
         CborSerializer.encodeNullable(this._data, CborSerializer.encodeByteString),
+        CborSerializer.encodeUnsignedInteger(this.timeout),
       ),
     );
   }
@@ -180,6 +186,7 @@ export class TransferTransaction implements ITransaction {
           ${this.lockScript.toString()}
         Recipient: ${this.recipient.toString()}
         StateMask: ${this._stateMask.toString()}
-        Data: ${this._data ? HexConverter.encode(this._data) : 'null'}`;
+        Data: ${this._data ? HexConverter.encode(this._data) : 'null'}
+        Timeout: ${this.timeout.toString()}`;
   }
 }

@@ -20,6 +20,7 @@ export enum InclusionProofVerificationStatus {
   CERTIFICATION_DATA_MISMATCH = 'CERTIFICATION_DATA_MISMATCH',
   TRANSACTION_HASH_MISMATCH = 'TRANSACTION_HASH_MISMATCH',
   MISSING_REFERENCE_TIME = 'MISSING_REFERENCE_TIME',
+  REQUEST_EXPIRED = 'REQUEST_EXPIRED',
   NOT_AUTHENTICATED = 'NOT_AUTHENTICATED',
   INCLUSION_CERTIFICATE_MISSING = 'INCLUSION_CERTIFICATE_MISSING',
   PATH_INVALID = 'PATH_INVALID',
@@ -40,6 +41,7 @@ export class InclusionProofVerificationRule {
    * @param {PredicateVerifierService} predicateVerifierFactory Predicate verifier service.
    * @param {InclusionProof} inclusionProof Inclusion proof to verify.
    * @param {DataHash} transactionHash Canonical hash of the transaction.
+   * @param {bigint} timeout Exclusive timeout of the certification request.
    * @param {bigint} referenceTime Reference time the transition was validated under.
    * @param {EncodedPredicate} lockScript Lock script the transaction unlocks.
    * @param {DataHash} sourceStateHash Hash of the state the transaction spends.
@@ -51,6 +53,7 @@ export class InclusionProofVerificationRule {
     unicityCertificateVerifier: UnicityCertificateVerifier,
     inclusionProof: InclusionProof,
     transactionHash: DataHash,
+    timeout: bigint,
     referenceTime: bigint,
     lockScript: EncodedPredicate,
     sourceStateHash: DataHash,
@@ -79,12 +82,18 @@ export class InclusionProofVerificationRule {
 
     if (
       !EncodedPredicate.equals(certificationData.lockScript, lockScript) ||
-      !certificationData.sourceStateHash.equals(sourceStateHash)
+      !certificationData.sourceStateHash.equals(sourceStateHash) ||
+      certificationData.timeout !== timeout
     ) {
       return new VerificationResult(
         'InclusionProofVerificationRule',
         InclusionProofVerificationStatus.CERTIFICATION_DATA_MISMATCH,
       );
+    }
+
+    // The request was admissible only in a round strictly before its timeout.
+    if (referenceTime >= timeout) {
+      return new VerificationResult('InclusionProofVerificationRule', InclusionProofVerificationStatus.REQUEST_EXPIRED);
     }
 
     const stateId = await StateId.fromCertificationData(certificationData);

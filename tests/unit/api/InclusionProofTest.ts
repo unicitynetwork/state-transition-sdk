@@ -23,6 +23,7 @@ import {
   InclusionProofVerificationStatus,
 } from '../../../src/transaction/verification/rule/InclusionProofVerificationRule.js';
 import { HexConverter } from '../../../src/util/HexConverter.js';
+import { requestTimeout } from '../../utils/RequestTimeout.js';
 import { createRootTrustBase } from '../../utils/RootTrustBaseFixture.js';
 import { createUnicityCertificate } from '../../utils/UnicityCertificateFixture.js';
 import { createUnicityCertificateVerifier } from '../../utils/UnicityCertificateVerifierFixture.js';
@@ -42,7 +43,11 @@ describe('InclusionProof', () => {
   let trustBase: RootTrustBase;
 
   beforeAll(async () => {
-    transaction = await MintTransaction.create(NetworkId.LOCAL, SignaturePredicate.fromSigningService(signingService));
+    transaction = await MintTransaction.create(
+      NetworkId.LOCAL,
+      SignaturePredicate.fromSigningService(signingService),
+      requestTimeout(),
+    );
     const smt = new SparseMerkleTree(new DataHasherFactory(HashAlgorithm.SHA256, NodeDataHasher));
     const stateId = await StateId.fromTransaction(transaction);
     certificationData = await CertificationData.fromMintTransaction(transaction);
@@ -83,6 +88,7 @@ describe('InclusionProof', () => {
         unicityCertificateVerifier,
         new InclusionProof(certificationData, REFERENCE_TIME, inclusionCertificate, unicityCertificate),
         transactionHash,
+        transaction.timeout,
         REFERENCE_TIME,
         transaction.lockScript,
         transaction.sourceStateHash,
@@ -96,6 +102,7 @@ describe('InclusionProof', () => {
         unicityCertificateVerifier,
         new InclusionProof(certificationData, REFERENCE_TIME, null, unicityCertificate),
         transactionHash,
+        transaction.timeout,
         REFERENCE_TIME,
         transaction.lockScript,
         transaction.sourceStateHash,
@@ -117,6 +124,7 @@ describe('InclusionProof', () => {
                 HexConverter.decode('00000000000000000000000000000000000000000000000000000000000000000001'),
               ).data,
             ),
+            CborSerializer.encodeUnsignedInteger(certificationData.timeout),
             CborSerializer.encodeByteString(certificationData.unlockScript),
           ),
         ),
@@ -132,6 +140,7 @@ describe('InclusionProof', () => {
         unicityCertificateVerifier,
         invalidTransactionHashInclusionProof,
         await transaction.calculateTransactionHash(),
+        transaction.timeout,
         REFERENCE_TIME,
         transaction.lockScript,
         transaction.sourceStateHash,
@@ -149,6 +158,7 @@ describe('InclusionProof', () => {
             EncodedPredicate.fromPredicate(certificationData.lockScript).toCBOR(),
             CborSerializer.encodeByteString(certificationData.sourceStateHash.data),
             CborSerializer.encodeByteString(certificationData.transactionHash.data),
+            CborSerializer.encodeUnsignedInteger(certificationData.timeout),
             CborSerializer.encodeByteString(new Uint8Array(65)),
           ),
         ),
@@ -165,6 +175,7 @@ describe('InclusionProof', () => {
         unicityCertificateVerifier,
         inclusionProof,
         await transaction.calculateTransactionHash(),
+        transaction.timeout,
         REFERENCE_TIME,
         transaction.lockScript,
         transaction.sourceStateHash,
@@ -187,11 +198,35 @@ describe('InclusionProof', () => {
         unicityCertificateVerifier,
         inclusionProof,
         await transaction.calculateTransactionHash(),
+        transaction.timeout,
         REFERENCE_TIME + 1n,
         transaction.lockScript,
         transaction.sourceStateHash,
       ).then((result) => result.status),
     ).resolves.toEqual(InclusionProofVerificationStatus.PATH_INVALID);
+  });
+
+  it('verification fails when the reference time has reached the request timeout', async () => {
+    const inclusionProof = new InclusionProof(
+      certificationData,
+      REFERENCE_TIME,
+      inclusionCertificate,
+      unicityCertificate,
+    );
+
+    await expect(
+      InclusionProofVerificationRule.verify(
+        trustBase,
+        predicateVerifier,
+        unicityCertificateVerifier,
+        inclusionProof,
+        await transaction.calculateTransactionHash(),
+        transaction.timeout,
+        transaction.timeout,
+        transaction.lockScript,
+        transaction.sourceStateHash,
+      ).then((result) => result.status),
+    ).resolves.toEqual(InclusionProofVerificationStatus.REQUEST_EXPIRED);
   });
 
   it('verification fails with invalid trustbase', async () => {
@@ -209,6 +244,7 @@ describe('InclusionProof', () => {
         unicityCertificateVerifier,
         inclusionProof,
         await transaction.calculateTransactionHash(),
+        transaction.timeout,
         REFERENCE_TIME,
         transaction.lockScript,
         transaction.sourceStateHash,

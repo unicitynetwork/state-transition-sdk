@@ -54,6 +54,7 @@ export class TokenSplit {
     token: Token,
     decodePaymentData: (bytes: Uint8Array) => Promise<IPaymentData>,
     requests: SplitTokenRequest[],
+    burnTimeout: bigint,
     burnStateMask: StateMask = StateMask.generate(),
   ): Promise<ISplit> {
     const factory = new DataHasherFactory(HashAlgorithm.SHA256, DataHasher);
@@ -126,7 +127,13 @@ export class TokenSplit {
     const manifestBytes = SplitManifest.create(roots).toCBOR();
     const burnReason = (await new DataHasher(HashAlgorithm.SHA256).update(manifestBytes).digest()).data;
     const burnPredicate = BurnPredicate.create(burnReason);
-    const burnTransaction = await TransferTransaction.create(token, burnPredicate, burnStateMask, manifestBytes);
+    const burnTransaction = await TransferTransaction.create(
+      token,
+      burnPredicate,
+      burnStateMask,
+      burnTimeout,
+      manifestBytes,
+    );
 
     const tokens: SplitToken[] = [];
     for (let i = 0; i < requests.length; i++) {

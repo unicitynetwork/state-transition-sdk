@@ -90,6 +90,13 @@ export class CertifiedMintTransaction implements ITransaction {
   }
 
   /**
+   * @returns {bigint} Exclusive certification request timeout of the inner transaction.
+   */
+  public get timeout(): bigint {
+    return this.transaction.timeout;
+  }
+
+  /**
    * @returns {TokenId} Token id of the inner transaction (derived from networkId and salt).
    */
   public get tokenId(): TokenId {
@@ -157,6 +164,7 @@ export class CertifiedMintTransaction implements ITransaction {
       unicityCertificateVerifier,
       inclusionProof,
       await transaction.calculateTransactionHash(),
+      transaction.timeout,
       referenceTime,
       transaction.lockScript,
       transaction.sourceStateHash,

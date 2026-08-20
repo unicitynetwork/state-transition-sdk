@@ -190,6 +190,7 @@ export async function waitInclusionProof(
       unicityCertificateVerifier,
       inclusionProof,
       transactionHash,
+      transaction.timeout,
       inclusionProof.referenceTime,
       transaction.lockScript,
       transaction.sourceStateHash,

@@ -18,6 +18,7 @@ import { MintTransaction } from '../../../src/transaction/MintTransaction.js';
 import { TokenSalt } from '../../../src/transaction/TokenSalt.js';
 import { TokenType } from '../../../src/transaction/TokenType.js';
 import { SleepError, waitInclusionProof } from '../../../src/util/InclusionProofUtils.js';
+import { requestTimeout } from '../../utils/RequestTimeout.js';
 import { createRootTrustBase } from '../../utils/RootTrustBaseFixture.js';
 import { createUnicityCertificate } from '../../utils/UnicityCertificateFixture.js';
 import { createUnicityCertificateVerifier } from '../../utils/UnicityCertificateVerifierFixture.js';
@@ -74,6 +75,7 @@ describe('waitInclusionProof', () => {
     transaction = await MintTransaction.create(
       NetworkId.LOCAL,
       SignaturePredicate.create(signingService.publicKey),
+      requestTimeout(),
       null,
       TokenType.generate(),
       TokenSalt.generate(),
