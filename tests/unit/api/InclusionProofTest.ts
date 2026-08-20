@@ -116,7 +116,7 @@ describe('InclusionProof', () => {
         CborSerializer.encodeTag(
           CertificationData.CBOR_TAG,
           CborSerializer.encodeArray(
-            CborSerializer.encodeUnsignedInteger(1n),
+            CborSerializer.encodeUnsignedInteger(2n),
             EncodedPredicate.fromPredicate(certificationData.lockScript).toCBOR(),
             CborSerializer.encodeByteString(certificationData.sourceStateHash.data),
             CborSerializer.encodeByteString(
@@ -124,7 +124,7 @@ describe('InclusionProof', () => {
                 HexConverter.decode('00000000000000000000000000000000000000000000000000000000000000000001'),
               ).data,
             ),
-            CborSerializer.encodeUnsignedInteger(certificationData.timeout),
+            CborSerializer.encodeUnsignedInteger(certificationData.timeout!),
             CborSerializer.encodeByteString(certificationData.unlockScript),
           ),
         ),
@@ -154,11 +154,11 @@ describe('InclusionProof', () => {
         CborSerializer.encodeTag(
           CertificationData.CBOR_TAG,
           CborSerializer.encodeArray(
-            CborSerializer.encodeUnsignedInteger(1n),
+            CborSerializer.encodeUnsignedInteger(2n),
             EncodedPredicate.fromPredicate(certificationData.lockScript).toCBOR(),
             CborSerializer.encodeByteString(certificationData.sourceStateHash.data),
             CborSerializer.encodeByteString(certificationData.transactionHash.data),
-            CborSerializer.encodeUnsignedInteger(certificationData.timeout),
+            CborSerializer.encodeUnsignedInteger(certificationData.timeout!),
             CborSerializer.encodeByteString(new Uint8Array(65)),
           ),
         ),
@@ -203,7 +203,7 @@ describe('InclusionProof', () => {
         transaction.lockScript,
         transaction.sourceStateHash,
       ).then((result) => result.status),
-    ).resolves.toEqual(InclusionProofVerificationStatus.PATH_INVALID);
+    ).resolves.toEqual(InclusionProofVerificationStatus.MISSING_REFERENCE_TIME);
   });
 
   it('verification fails when the reference time has reached the request timeout', async () => {
@@ -222,7 +222,7 @@ describe('InclusionProof', () => {
         inclusionProof,
         await transaction.calculateTransactionHash(),
         transaction.timeout,
-        transaction.timeout,
+        transaction.timeout!,
         transaction.lockScript,
         transaction.sourceStateHash,
       ).then((result) => result.status),

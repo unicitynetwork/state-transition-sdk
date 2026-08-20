@@ -66,7 +66,7 @@ export class CertifiedTransferTransaction implements ITransaction {
   /**
    * @returns {bigint} Exclusive certification request timeout of the inner transaction.
    */
-  public get timeout(): bigint {
+  public get timeout(): bigint | null {
     return this.transaction.timeout;
   }
 
@@ -79,11 +79,12 @@ export class CertifiedTransferTransaction implements ITransaction {
    */
   public static async fromCBOR(bytes: Uint8Array, token: Token): Promise<CertifiedTransferTransaction> {
     const data = CborDeserializer.decodeArray(bytes, 3);
-    return new CertifiedTransferTransaction(
-      await TransferTransaction.fromCBOR(data[0], token),
-      CborDeserializer.decodeUnsignedInteger(data[1]),
-      InclusionProof.fromCBOR(data[2]),
-    );
+    const referenceTime = CborDeserializer.decodeUnsignedInteger(data[1]);
+    const proof = InclusionProof.fromCBOR(data[2]);
+    if (proof.referenceTime == null || referenceTime !== proof.referenceTime) {
+      throw new Error('Certified transfer transaction reference time does not match its inclusion proof.');
+    }
+    return new CertifiedTransferTransaction(await TransferTransaction.fromCBOR(data[0], token), referenceTime, proof);
   }
 
   /**

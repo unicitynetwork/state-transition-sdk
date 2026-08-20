@@ -3,13 +3,13 @@
 ## Overview
 
 The State Transition SDK is a TypeScript library that provides an off-chain token transaction framework. Tokens are managed, stored, and transferred off-chain with only cryptographic commitments published on-chain, ensuring privacy while preventing double-spending through single-spend proofs.
-This is a low-level SDK, that supports transferring tokens, making payments, and splitting tokens. 
+This is a low-level SDK, that supports transferring tokens, making payments, and splitting tokens.
 In this system, tokens are self-contained entities containing complete transaction history and cryptographic proofs attesting to their current state (ownership, value, etc.). State transitions are verified through consultation with blockchain infrastructure (Unicity) to produce proof of single spend.
 
 ### Key Features
 
 - **Off-chain Privacy**: Cryptographic commitments contain no information about tokens, their state, or transaction nature
-- **Horizontal Scalability**: Millions of transaction commitments per block capability  
+- **Horizontal Scalability**: Millions of transaction commitments per block capability
 - **Zero-Knowledge Transactions**: Observers cannot determine if commitments refer to token transactions or other processes
 - **Offline Transaction Support**: Create and serialize transactions without network connectivity
 - **TypeScript Support**: Full type safety and modern development experience
@@ -58,7 +58,7 @@ Prerequisites
 Recipient knows some info about token, like token type for generating address.
 
 ```text
-A[Start] 
+A[Start]
 A --> B[Recipient Generates Predicate]
 B --> C[Recipient Shares Predicate with Sender]
 C --> D[Sender Creates Transaction]
@@ -76,12 +76,8 @@ I --> J[End]
 
 A `Token` is a self-contained, CBOR-serializable record that bundles its genesis with an ordered transfer history:
 
-- `genesis`: a `CertifiedMintTransaction` (a `MintTransaction` plus the reference time it was certified under and its `InclusionProof`). The mint transaction carries `networkId`, `tokenId`, `tokenType`, `salt`, `recipient`, an exclusive request timeout, optional `justification`, and optional `data`.
-- `transactions`: an ordered list of `CertifiedTransferTransaction` entries, each wrapping a `TransferTransaction` (recipient, state mask, exclusive request timeout, optional data) with its reference time and `InclusionProof`.
-
-Every transaction carries an exclusive certification request timeout. The Unicity Service admits the request only in a round whose reference time is strictly below it, and the timeout is part of the transaction encoding, so the transaction hash commits to it and the unlock script signs it. An expired request is rejected rather than certified late.
-
-Each certified transaction carries the reference time of the round it was validated in. The aggregator's sparse Merkle tree stores `SHA-256(CBOR([transactionHash, referenceTime]))` as the leaf value, so the reference time is a property of the leaf rather than of whichever proof happens to establish it. The tree is append-only, and a proof fetched later is anchored to a later root whose input record carries a later time; verification uses the carried reference time and rejects any value that does not reproduce the certified leaf.
+- `genesis`: a `CertifiedMintTransaction` (a `MintTransaction` plus its `InclusionProof`). The mint transaction carries `networkId`, `tokenId`, `tokenType`, `salt`, `recipient`, optional `justification`, optional `data`, and optionally a request timeout.
+- `transactions`: an ordered list of `CertifiedTransferTransaction` entries, each wrapping a `TransferTransaction` (recipient, state mask, optional data and timeout) with its `InclusionProof`.
 
 See [`src/transaction/Token.ts`](./src/transaction/Token.ts) for the authoritative shape.
 

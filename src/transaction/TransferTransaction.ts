@@ -22,13 +22,14 @@ import { dedent } from '../util/StringUtils.js';
  */
 export class TransferTransaction implements ITransaction {
   public static readonly CBOR_TAG = 39045n;
-  private static readonly VERSION = 1n;
+  private static readonly LEGACY_VERSION = 1n;
+  private static readonly TIMEOUT_VERSION = 2n;
 
   private constructor(
     public readonly sourceStateHash: DataHash,
     public readonly lockScript: EncodedPredicate,
     public readonly recipient: EncodedPredicate,
-    public readonly timeout: bigint,
+    public readonly timeout: bigint | null,
     private readonly _stateMask: StateMask,
     private readonly _data: Uint8Array | null,
   ) {}
@@ -51,7 +52,7 @@ export class TransferTransaction implements ITransaction {
    * @returns {bigint} Wire-format version of this transaction.
    */
   public get version(): bigint {
-    return TransferTransaction.VERSION;
+    return this.timeout == null ? TransferTransaction.LEGACY_VERSION : TransferTransaction.TIMEOUT_VERSION;
   }
 
   /**
@@ -60,17 +61,31 @@ export class TransferTransaction implements ITransaction {
    * @param {Token} token Token being transferred (last transaction is used as the source).
    * @param {IPredicate} recipient Predicate that will lock the new state.
    * @param {StateMask} stateMask State mask mixed into the new state hash.
-   * @param {bigint} timeout Exclusive timeout of the certification request.
    * @param {Uint8Array|null} data Optional data payload.
    * @returns {Promise<TransferTransaction>} New transfer transaction.
    */
-  public static async create(
+  public static create(
+    token: Token,
+    recipient: IPredicate,
+    stateMask: StateMask,
+    data?: Uint8Array | null,
+  ): Promise<TransferTransaction>;
+  public static create(
     token: Token,
     recipient: IPredicate,
     stateMask: StateMask,
     timeout: bigint,
-    data: Uint8Array | null = null,
+    data?: Uint8Array | null,
+  ): Promise<TransferTransaction>;
+  public static async create(
+    token: Token,
+    recipient: IPredicate,
+    stateMask: StateMask,
+    dataOrTimeout: Uint8Array | bigint | null = null,
+    explicitData: Uint8Array | null = null,
   ): Promise<TransferTransaction> {
+    const timeout = typeof dataOrTimeout === 'bigint' ? dataOrTimeout : null;
+    let data = timeout == null ? (dataOrTimeout as Uint8Array | null) : explicitData;
     data = data ? new Uint8Array(data) : null;
 
     const transaction = token.latestTransaction;
@@ -84,6 +99,17 @@ export class TransferTransaction implements ITransaction {
     );
   }
 
+  /** Create a transfer transaction with an explicit exclusive request timeout. */
+  public static createWithTimeout(
+    token: Token,
+    recipient: IPredicate,
+    stateMask: StateMask,
+    timeout: bigint,
+    data: Uint8Array | null = null,
+  ): Promise<TransferTransaction> {
+    return TransferTransaction.create(token, recipient, stateMask, timeout, data);
+  }
+
   /**
    * Create TransferTransaction from CBOR bytes.
    *
@@ -92,19 +118,27 @@ export class TransferTransaction implements ITransaction {
    * @returns {Promise<TransferTransaction>} Decoded transaction.
    * @throws {CborError} On wrong tag or unsupported version.
    */
-  public static fromCBOR(bytes: Uint8Array, token: Token): Promise<TransferTransaction> {
+  public static async fromCBOR(bytes: Uint8Array, token: Token): Promise<TransferTransaction> {
     const tag = CborDeserializer.decodeTag(bytes);
     if (tag.tag !== TransferTransaction.CBOR_TAG) {
       throw new CborError(`Invalid CBOR tag for TransferTransaction: ${tag.tag}`);
     }
 
-    const data = CborDeserializer.decodeArray(tag.data, 5);
+    const data = CborDeserializer.decodeArray(tag.data);
     const version = CborDeserializer.decodeUnsignedInteger(data[0]);
-    if (version !== TransferTransaction.VERSION) {
+    if (version === TransferTransaction.LEGACY_VERSION && data.length === 4) {
+      return TransferTransaction.create(
+        token,
+        EncodedPredicate.fromCBOR(data[1]),
+        StateMask.fromCBOR(data[2]),
+        CborDeserializer.decodeNullable(data[3], CborDeserializer.decodeByteString),
+      );
+    }
+    if (version !== TransferTransaction.TIMEOUT_VERSION || data.length !== 5) {
       throw new CborError(`Unsupported TransferTransaction version: ${version}`);
     }
 
-    return TransferTransaction.create(
+    return await TransferTransaction.createWithTimeout(
       token,
       EncodedPredicate.fromCBOR(data[1]),
       StateMask.fromCBOR(data[2]),
@@ -145,7 +179,7 @@ export class TransferTransaction implements ITransaction {
         this.recipient.toCBOR(),
         this._stateMask.toCBOR(),
         CborSerializer.encodeNullable(this._data, CborSerializer.encodeByteString),
-        CborSerializer.encodeUnsignedInteger(this.timeout),
+        ...(this.timeout == null ? [] : [CborSerializer.encodeUnsignedInteger(this.timeout)]),
       ),
     );
   }
@@ -187,6 +221,6 @@ export class TransferTransaction implements ITransaction {
         Recipient: ${this.recipient.toString()}
         StateMask: ${this._stateMask.toString()}
         Data: ${this._data ? HexConverter.encode(this._data) : 'null'}
-        Timeout: ${this.timeout.toString()}`;
+        Timeout: ${this.timeout?.toString() ?? 'service default'}`;
   }
 }

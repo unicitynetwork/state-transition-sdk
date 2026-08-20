@@ -50,13 +50,28 @@ export class TokenSplit {
    *   derived mask so the identical burn transaction can be reconstructed after a failure.
    * @returns {Promise<ISplit>} Burn transaction and split tokens ready to mint.
    */
-  public static async split(
+  public static split(
+    token: Token,
+    decodePaymentData: (bytes: Uint8Array) => Promise<IPaymentData>,
+    requests: SplitTokenRequest[],
+    burnStateMask?: StateMask,
+  ): Promise<ISplit>;
+  public static split(
     token: Token,
     decodePaymentData: (bytes: Uint8Array) => Promise<IPaymentData>,
     requests: SplitTokenRequest[],
     burnTimeout: bigint,
-    burnStateMask: StateMask = StateMask.generate(),
+    burnStateMask?: StateMask,
+  ): Promise<ISplit>;
+  public static async split(
+    token: Token,
+    decodePaymentData: (bytes: Uint8Array) => Promise<IPaymentData>,
+    requests: SplitTokenRequest[],
+    burnTimeoutOrStateMask: bigint | StateMask = StateMask.generate(),
+    explicitStateMask: StateMask = StateMask.generate(),
   ): Promise<ISplit> {
+    const burnTimeout = typeof burnTimeoutOrStateMask === 'bigint' ? burnTimeoutOrStateMask : null;
+    const burnStateMask = (burnTimeout == null ? burnTimeoutOrStateMask : explicitStateMask) as StateMask;
     const factory = new DataHasherFactory(HashAlgorithm.SHA256, DataHasher);
 
     if (token.genesis.data == null) {
@@ -127,13 +142,10 @@ export class TokenSplit {
     const manifestBytes = SplitManifest.create(roots).toCBOR();
     const burnReason = (await new DataHasher(HashAlgorithm.SHA256).update(manifestBytes).digest()).data;
     const burnPredicate = BurnPredicate.create(burnReason);
-    const burnTransaction = await TransferTransaction.create(
-      token,
-      burnPredicate,
-      burnStateMask,
-      burnTimeout,
-      manifestBytes,
-    );
+    const burnTransaction =
+      burnTimeout == null
+        ? await TransferTransaction.create(token, burnPredicate, burnStateMask, manifestBytes)
+        : await TransferTransaction.create(token, burnPredicate, burnStateMask, burnTimeout, manifestBytes);
 
     const tokens: SplitToken[] = [];
     for (let i = 0; i < requests.length; i++) {

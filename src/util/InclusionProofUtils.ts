@@ -178,10 +178,13 @@ export async function waitInclusionProof(
 
   const poll = async (requestSignal: AbortSignal): Promise<InclusionProof | null> => {
     const { inclusionProof } = await client.getInclusionProof(stateId, { signal: requestSignal });
-    if (inclusionProof.referenceTime == null) {
-      // Nothing certified for this state id yet; an inclusion proof always
-      // carries the reference time its leaf value was built from.
+    if (inclusionProof.certificationData == null || inclusionProof.inclusionCertificate == null) {
       return null;
+    }
+
+    const referenceTime = inclusionProof.referenceTime;
+    if (referenceTime == null) {
+      throw new Error('Inclusion proof is missing its leaf creation reference time.');
     }
 
     const verificationStatus = await InclusionProofVerificationRule.verify(
@@ -191,7 +194,7 @@ export async function waitInclusionProof(
       inclusionProof,
       transactionHash,
       transaction.timeout,
-      inclusionProof.referenceTime,
+      referenceTime,
       transaction.lockScript,
       transaction.sourceStateHash,
     );

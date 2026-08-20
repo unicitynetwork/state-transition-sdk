@@ -139,7 +139,7 @@ class WorkerTransferTransaction {
     private readonly bytes: Uint8Array,
     public readonly sourceStateHash: DataHash,
     public readonly lockScript: EncodedPredicate,
-    public readonly timeout: bigint,
+    public readonly timeout: bigint | null,
     public readonly referenceTime: bigint,
     public readonly inclusionProof: InclusionProof,
   ) {}
@@ -153,14 +153,19 @@ class WorkerTransferTransaction {
   public static fromCBOR(bytes: Uint8Array): WorkerTransferTransaction {
     const data = CborDeserializer.decodeArray(bytes, 4);
     const certified = CborDeserializer.decodeArray(data[0], 3);
+    const proof = InclusionProof.fromCBOR(certified[2]);
+    const referenceTime = CborDeserializer.decodeUnsignedInteger(certified[1]);
+    if (proof.referenceTime == null || proof.referenceTime !== referenceTime) {
+      throw new Error('Certified transfer transaction reference time does not match its inclusion proof.');
+    }
 
     return new WorkerTransferTransaction(
       certified[0],
       DataHash.fromImprint(CborDeserializer.decodeByteString(data[1])),
       EncodedPredicate.fromCBOR(data[2]),
-      CborDeserializer.decodeUnsignedInteger(data[3]),
-      CborDeserializer.decodeUnsignedInteger(certified[1]),
-      InclusionProof.fromCBOR(certified[2]),
+      CborDeserializer.decodeNullable(data[3], CborDeserializer.decodeUnsignedInteger),
+      referenceTime,
+      proof,
     );
   }
 
@@ -176,7 +181,7 @@ class WorkerTransferTransaction {
       transaction.toCBOR(),
       CborSerializer.encodeByteString(transaction.sourceStateHash.imprint),
       transaction.lockScript.toCBOR(),
-      CborSerializer.encodeUnsignedInteger(transaction.timeout),
+      CborSerializer.encodeNullable(transaction.timeout, CborSerializer.encodeUnsignedInteger),
     );
   }
 

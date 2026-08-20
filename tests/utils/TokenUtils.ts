@@ -1,4 +1,3 @@
-import { requestTimeout } from './RequestTimeout.js';
 import { CertificationData } from '../../src/api/CertificationData.js';
 import { CertificationStatus } from '../../src/api/CertificationResponse.js';
 import { NetworkId } from '../../src/api/NetworkId.js';
@@ -31,7 +30,6 @@ export async function mintToken(
   const transaction = await MintTransaction.create(
     networkId,
     recipient,
-    requestTimeout(),
     data,
     tokenType,
     salt,
@@ -76,7 +74,7 @@ export async function transferToken(
     throw new Error(`Token verification failed: ${result.status}`);
   }
 
-  const transaction = await TransferTransaction.create(token, recipient, StateMask.generate(), requestTimeout());
+  const transaction = await TransferTransaction.create(token, recipient, StateMask.generate());
 
   return transferTokenWithTransaction(
     client,

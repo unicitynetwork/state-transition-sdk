@@ -19,12 +19,11 @@ export interface ITransaction {
   readonly stateMask: StateMask;
 
   /**
-   * Exclusive timeout of the certification request. The Unicity Service admits
-   * the request only in a round whose reference time is below this value. It is
-   * part of the transaction encoding, so the transaction hash commits to it and
-   * the unlock script signs it.
+   * Explicit exclusive timeout of the certification request, or `null` to let
+   * the service derive one from consensus time. Explicit values are part of the
+   * v2 transaction encoding.
    */
-  readonly timeout: bigint;
+  readonly timeout: bigint | null;
 
   /**
    * Compute the hash of the resulting state after applying this transaction.

@@ -41,7 +41,7 @@ export class InclusionProofVerificationRule {
    * @param {PredicateVerifierService} predicateVerifierFactory Predicate verifier service.
    * @param {InclusionProof} inclusionProof Inclusion proof to verify.
    * @param {DataHash} transactionHash Canonical hash of the transaction.
-   * @param {bigint} timeout Exclusive timeout of the certification request.
+   * @param {bigint|null} timeout Explicit timeout, or `null` for the service default.
    * @param {bigint} referenceTime Reference time the transition was validated under.
    * @param {EncodedPredicate} lockScript Lock script the transaction unlocks.
    * @param {DataHash} sourceStateHash Hash of the state the transaction spends.
@@ -53,7 +53,7 @@ export class InclusionProofVerificationRule {
     unicityCertificateVerifier: UnicityCertificateVerifier,
     inclusionProof: InclusionProof,
     transactionHash: DataHash,
-    timeout: bigint,
+    timeout: bigint | null,
     referenceTime: bigint,
     lockScript: EncodedPredicate,
     sourceStateHash: DataHash,
@@ -92,7 +92,7 @@ export class InclusionProofVerificationRule {
     }
 
     // The request was admissible only in a round strictly before its timeout.
-    if (referenceTime >= timeout) {
+    if (timeout != null && referenceTime >= timeout) {
       return new VerificationResult('InclusionProofVerificationRule', InclusionProofVerificationStatus.REQUEST_EXPIRED);
     }
 
@@ -101,6 +101,12 @@ export class InclusionProofVerificationRule {
     // under. It is taken from the caller, not from the proof's own unicity
     // certificate: the tree is append-only, so the proof may have been issued
     // against a later root whose input record carries a later reference time.
+    if (inclusionProof.referenceTime == null || inclusionProof.referenceTime !== referenceTime) {
+      return new VerificationResult(
+        'InclusionProofVerificationRule',
+        InclusionProofVerificationStatus.MISSING_REFERENCE_TIME,
+      );
+    }
     const leafValue = await calculateLeafValue(certificationData.transactionHash, referenceTime);
     const result = await inclusionProof.inclusionCertificate.verify(
       stateId,

@@ -17,21 +17,22 @@ import { dedent } from '../util/StringUtils.js';
  */
 export class CertificationData {
   public static readonly CBOR_TAG = 39031n;
-  private static readonly VERSION = 1n;
+  private static readonly LEGACY_VERSION = 1n;
+  private static readonly TIMEOUT_VERSION = 2n;
 
   /**
    * Create a certification data object.
    * @param {IPredicate} lockScript
    * @param {DataHash} sourceStateHash
    * @param {DataHash} transactionHash
-   * @param {bigint} timeout Exclusive request timeout
+   * @param {bigint|null} timeout Explicit exclusive request timeout, or `null` for the service default
    * @param {Uint8Array} _unlockScript Unlock script bytes
    */
   private constructor(
     public readonly lockScript: EncodedPredicate,
     public readonly sourceStateHash: DataHash,
     public readonly transactionHash: DataHash,
-    public readonly timeout: bigint,
+    public readonly timeout: bigint | null,
     private readonly _unlockScript: Uint8Array,
   ) {
     this._unlockScript = new Uint8Array(_unlockScript);
@@ -48,7 +49,7 @@ export class CertificationData {
    * @returns {bigint} Wire-format version of this certification data.
    */
   public get version(): bigint {
-    return CertificationData.VERSION;
+    return this.timeout == null ? CertificationData.LEGACY_VERSION : CertificationData.TIMEOUT_VERSION;
   }
 
   /**
@@ -63,18 +64,25 @@ export class CertificationData {
       throw new CborError(`Invalid CBOR tag for CertificationData: ${tag.tag}`);
     }
 
-    const data = CborDeserializer.decodeArray(tag.data, 6);
+    const data = CborDeserializer.decodeArray(tag.data);
     const version = CborDeserializer.decodeUnsignedInteger(data[0]);
-    if (version !== CertificationData.VERSION) {
+    if (version !== CertificationData.LEGACY_VERSION && version !== CertificationData.TIMEOUT_VERSION) {
       throw new CborError(`Unsupported CertificationData version: ${version}`);
+    }
+    const hasTimeout = version === CertificationData.TIMEOUT_VERSION;
+    const expectedLength = hasTimeout ? 6 : 5;
+    if (data.length !== expectedLength) {
+      throw new CborError(
+        `Expected CertificationData array length ${expectedLength} for version ${version}, got ${data.length}.`,
+      );
     }
 
     return new CertificationData(
       EncodedPredicate.fromCBOR(data[1]),
       new DataHash(HashAlgorithm.SHA256, CborDeserializer.decodeByteString(data[2])),
       new DataHash(HashAlgorithm.SHA256, CborDeserializer.decodeByteString(data[3])),
-      CborDeserializer.decodeUnsignedInteger(data[4]),
-      CborDeserializer.decodeByteString(data[5]),
+      hasTimeout ? CborDeserializer.decodeUnsignedInteger(data[4]) : null,
+      CborDeserializer.decodeByteString(data[hasTimeout ? 5 : 4]),
     );
   }
 
@@ -128,7 +136,7 @@ export class CertificationData {
         this.lockScript.toCBOR(),
         CborSerializer.encodeByteString(this.sourceStateHash.data),
         CborSerializer.encodeByteString(this.transactionHash.data),
-        CborSerializer.encodeUnsignedInteger(this.timeout),
+        ...(this.timeout == null ? [] : [CborSerializer.encodeUnsignedInteger(this.timeout)]),
         CborSerializer.encodeByteString(this._unlockScript),
       ),
     );
@@ -141,12 +149,12 @@ export class CertificationData {
   public toString(): string {
     return dedent`
       Certification Data
-        Version: ${CertificationData.VERSION}
+        Version: ${this.version}
         Owner Predicate: 
           ${this.lockScript.toString()}
         Source State Hash: ${this.sourceStateHash.toString()}
         Transaction Hash: ${this.transactionHash.toString()}
-        Timeout: ${this.timeout.toString()}
+        Timeout: ${this.timeout?.toString() ?? 'service default'}
         Witness: ${HexConverter.encode(this._unlockScript)}`;
   }
 }

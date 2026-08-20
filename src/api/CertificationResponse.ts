@@ -24,6 +24,8 @@ export enum CertificationStatus {
   INVALID_SHARD = 'INVALID_SHARD',
   /** The round's reference time had already reached the request's timeout. */
   REQUEST_EXPIRED = 'REQUEST_EXPIRED',
+  /** The service has not obtained a consensus reference time yet. */
+  SERVICE_NOT_READY = 'SERVICE_NOT_READY',
 }
 
 /**

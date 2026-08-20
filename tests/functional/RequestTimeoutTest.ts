@@ -41,4 +41,13 @@ describe('Certification request timeout', () => {
 
     await expect(second.calculateTransactionHash()).resolves.not.toEqual(await first.calculateTransactionHash());
   });
+
+  it('rejects a version that does not match the field count', async () => {
+    const transaction = await MintTransaction.create(NetworkId.LOCAL, recipient, 1755000000n);
+    const mismatched = transaction.toCBOR();
+    expect(mismatched[4]).toBe(2);
+    mismatched[4] = 1;
+
+    await expect(MintTransaction.fromCBOR(mismatched)).rejects.toThrow('Unsupported MintTransaction version: 1');
+  });
 });

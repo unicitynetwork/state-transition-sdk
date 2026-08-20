@@ -97,7 +97,7 @@ export class TestAggregatorClient implements IAggregatorClient {
       return CertificationResponse.create(CertificationStatus.SIGNATURE_VERIFICATION_FAILED);
     }
 
-    if (this.referenceTime >= certificationData.timeout) {
+    if (certificationData.timeout != null && this.referenceTime >= certificationData.timeout) {
       return CertificationResponse.create(CertificationStatus.REQUEST_EXPIRED);
     }
 
