@@ -109,7 +109,7 @@ export class MintTransaction implements ITransaction {
    * @returns {Promise<MintTransaction>} Decoded transaction.
    * @throws {CborError} On wrong tag or unsupported version.
    */
-  public static async fromCBOR(bytes: Uint8Array): Promise<MintTransaction> {
+  public static fromCBOR(bytes: Uint8Array): Promise<MintTransaction> {
     const tag = CborDeserializer.decodeTag(bytes);
     if (tag.tag !== MintTransaction.CBOR_TAG) {
       throw new CborError(`Invalid CBOR tag for MintTransaction: ${tag.tag}`);
@@ -121,7 +121,7 @@ export class MintTransaction implements ITransaction {
       throw new CborError(`Unsupported MintTransaction version: ${version}`);
     }
 
-    return await MintTransaction.create(
+    return MintTransaction.create(
       NetworkId.fromId(CborDeserializer.decodeUnsignedInteger(data[1])),
       EncodedPredicate.fromCBOR(data[2]),
       {

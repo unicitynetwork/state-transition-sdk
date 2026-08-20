@@ -87,7 +87,7 @@ export class TransferTransaction implements ITransaction {
    * @returns {Promise<TransferTransaction>} Decoded transaction.
    * @throws {CborError} On wrong tag or unsupported version.
    */
-  public static async fromCBOR(bytes: Uint8Array, token: Token): Promise<TransferTransaction> {
+  public static fromCBOR(bytes: Uint8Array, token: Token): Promise<TransferTransaction> {
     const tag = CborDeserializer.decodeTag(bytes);
     if (tag.tag !== TransferTransaction.CBOR_TAG) {
       throw new CborError(`Invalid CBOR tag for TransferTransaction: ${tag.tag}`);
@@ -99,7 +99,7 @@ export class TransferTransaction implements ITransaction {
       throw new CborError(`Unsupported TransferTransaction version: ${version}`);
     }
 
-    return await TransferTransaction.create(token, EncodedPredicate.fromCBOR(data[1]), StateMask.fromCBOR(data[2]), {
+    return TransferTransaction.create(token, EncodedPredicate.fromCBOR(data[1]), StateMask.fromCBOR(data[2]), {
       data: CborDeserializer.decodeNullable(data[3], CborDeserializer.decodeByteString),
       expiresAt: CborDeserializer.decodeNullable(data[4], CborDeserializer.decodeUnsignedInteger),
     });

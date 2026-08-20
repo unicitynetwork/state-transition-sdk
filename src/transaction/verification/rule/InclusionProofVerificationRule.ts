@@ -20,6 +20,7 @@ export enum InclusionProofVerificationStatus {
   CERTIFICATION_DATA_MISMATCH = 'CERTIFICATION_DATA_MISMATCH',
   TRANSACTION_HASH_MISMATCH = 'TRANSACTION_HASH_MISMATCH',
   MISSING_REFERENCE_TIME = 'MISSING_REFERENCE_TIME',
+  REFERENCE_TIME_MISMATCH = 'REFERENCE_TIME_MISMATCH',
   REQUEST_EXPIRED = 'REQUEST_EXPIRED',
   NOT_AUTHENTICATED = 'NOT_AUTHENTICATED',
   INCLUSION_CERTIFICATE_MISSING = 'INCLUSION_CERTIFICATE_MISSING',
@@ -103,10 +104,11 @@ export class InclusionProofVerificationRule {
     // under. It is taken from the caller, not from the proof's own unicity
     // certificate: the tree is append-only, so the proof may have been issued
     // against a later root whose input record carries a later reference time.
-    if (inclusionProof.referenceTime == null || inclusionProof.referenceTime !== referenceTime) {
+    // A null reference time on the proof also fails this comparison.
+    if (inclusionProof.referenceTime !== referenceTime) {
       return new VerificationResult(
         'InclusionProofVerificationRule',
-        InclusionProofVerificationStatus.MISSING_REFERENCE_TIME,
+        InclusionProofVerificationStatus.REFERENCE_TIME_MISMATCH,
       );
     }
     const leafValue = await calculateLeafValue(certificationData.transactionHash, referenceTime);

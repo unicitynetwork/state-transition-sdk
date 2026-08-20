@@ -15,6 +15,13 @@ export class InclusionProof {
 
   /**
    * Constructs an InclusionProof instance.
+   *
+   * `certificationData`, `referenceTime` and `inclusionCertificate` describe a
+   * leaf and belong together: all three are present once the request has been
+   * included in a certified round, and all three are absent while it is still
+   * pending. {@link InclusionProof.fromCBOR} rejects any other combination, so
+   * decoded proofs always satisfy that invariant.
+   *
    * @param certificationData Certification data.
    * @param referenceTime Reference time of the round the leaf was created in.
    * @param inclusionCertificate Inclusion certificate.
@@ -51,12 +58,26 @@ export class InclusionProof {
       throw new CborError(`Unsupported InclusionProof version: ${version}`);
     }
 
+    const certificationData = CborDeserializer.decodeNullable(data[1], CertificationData.fromCBOR);
+    const referenceTime = CborDeserializer.decodeNullable(data[2], CborDeserializer.decodeUnsignedInteger);
+    const inclusionCertificate = CborDeserializer.decodeNullable(data[3], (bytes) =>
+      InclusionCertificate.decode(CborDeserializer.decodeByteString(bytes)),
+    );
+
+    // A proof either establishes a leaf or reports that there is none yet. A
+    // partially present proof is neither, and would let a caller reach a leaf
+    // check with a reference time nothing certified.
+    const present = [certificationData, referenceTime, inclusionCertificate].filter((field) => field != null).length;
+    if (present !== 0 && present !== 3) {
+      throw new CborError(
+        'InclusionProof must carry certification data, reference time and inclusion certificate together, or none of them.',
+      );
+    }
+
     return new InclusionProof(
-      CborDeserializer.decodeNullable(data[1], CertificationData.fromCBOR),
-      CborDeserializer.decodeNullable(data[2], CborDeserializer.decodeUnsignedInteger),
-      CborDeserializer.decodeNullable(data[3], (inclusionCertificate) =>
-        InclusionCertificate.decode(CborDeserializer.decodeByteString(inclusionCertificate)),
-      ),
+      certificationData,
+      referenceTime,
+      inclusionCertificate,
       UnicityCertificate.fromCBOR(data[4]),
     );
   }

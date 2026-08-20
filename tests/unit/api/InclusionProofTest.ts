@@ -77,6 +77,25 @@ describe('InclusionProof', () => {
     );
   });
 
+  // A proof either establishes a leaf or reports that there is none yet. The
+  // aggregators emit all three leaf fields together or none of them, so a
+  // partially present proof is a protocol violation and is rejected at decode
+  // rather than surfacing as a null somewhere downstream.
+  it('rejects a partially present proof', () => {
+    const partial = [
+      new InclusionProof(certificationData, REFERENCE_TIME, null, unicityCertificate),
+      new InclusionProof(certificationData, null, inclusionCertificate, unicityCertificate),
+      new InclusionProof(null, REFERENCE_TIME, inclusionCertificate, unicityCertificate),
+      new InclusionProof(null, null, inclusionCertificate, unicityCertificate),
+    ];
+
+    for (const proof of partial) {
+      expect(() => InclusionProof.fromCBOR(proof.toCBOR())).toThrow(
+        'InclusionProof must carry certification data, reference time and inclusion certificate together, or none of them.',
+      );
+    }
+  });
+
   it('verifies', async () => {
     const transactionHash = await transaction.calculateTransactionHash();
     await expect(
@@ -201,7 +220,7 @@ describe('InclusionProof', () => {
         transaction.lockScript,
         transaction.sourceStateHash,
       ).then((result) => result.status),
-    ).resolves.toEqual(InclusionProofVerificationStatus.MISSING_REFERENCE_TIME);
+    ).resolves.toEqual(InclusionProofVerificationStatus.REFERENCE_TIME_MISMATCH);
   });
 
   it('verification fails when the reference time has reached the request timeout', async () => {

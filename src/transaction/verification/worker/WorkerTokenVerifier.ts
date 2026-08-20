@@ -155,7 +155,8 @@ class WorkerTransferTransaction {
     const certified = CborDeserializer.decodeArray(data[0], 3);
     const proof = InclusionProof.fromCBOR(certified[2]);
     const referenceTime = CborDeserializer.decodeUnsignedInteger(certified[1]);
-    if (proof.referenceTime == null || proof.referenceTime !== referenceTime) {
+    // A null reference time on the proof also fails this comparison.
+    if (proof.referenceTime !== referenceTime) {
       throw new Error('Certified transfer transaction reference time does not match its inclusion proof.');
     }
 

@@ -12,6 +12,7 @@ import { DataHash } from '../crypto/hash/DataHash.js';
 import { EncodedPredicate } from '../predicate/EncodedPredicate.js';
 import { PredicateVerifierService } from '../predicate/verification/PredicateVerifierService.js';
 import { CborDeserializer } from '../serialization/cbor/CborDeserializer.js';
+import { CborError } from '../serialization/cbor/CborError.js';
 import { CborSerializer } from '../serialization/cbor/CborSerializer.js';
 import { dedent } from '../util/StringUtils.js';
 import { VerificationError } from '../verification/VerificationError.js';
@@ -120,8 +121,9 @@ export class CertifiedMintTransaction implements ITransaction {
     const data = CborDeserializer.decodeArray(bytes, 3);
     const referenceTime = CborDeserializer.decodeUnsignedInteger(data[1]);
     const proof = InclusionProof.fromCBOR(data[2]);
-    if (proof.referenceTime == null || referenceTime !== proof.referenceTime) {
-      throw new Error('Certified mint transaction reference time does not match its inclusion proof.');
+    // A null reference time on the proof also fails this comparison.
+    if (referenceTime !== proof.referenceTime) {
+      throw new CborError('Certified mint transaction reference time does not match its inclusion proof.');
     }
     return new CertifiedMintTransaction(await MintTransaction.fromCBOR(data[0]), referenceTime, proof);
   }
