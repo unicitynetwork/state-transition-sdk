@@ -15,6 +15,7 @@ import { CborDeserializer } from '../serialization/cbor/CborDeserializer.js';
 import { CborSerializer } from '../serialization/cbor/CborSerializer.js';
 import { dedent } from '../util/StringUtils.js';
 import { VerificationError } from '../verification/VerificationError.js';
+import { VerificationResult } from '../verification/VerificationResult.js';
 import {
   InclusionProofVerificationRule,
   InclusionProofVerificationStatus,
@@ -28,6 +29,7 @@ export class CertifiedMintTransaction implements ITransaction {
 
   private constructor(
     private readonly transaction: MintTransaction,
+    public readonly referenceTime: bigint,
     public readonly inclusionProof: InclusionProof,
   ) {}
 
@@ -108,8 +110,12 @@ export class CertifiedMintTransaction implements ITransaction {
    * @returns {Promise<CertifiedMintTransaction>} Decoded certified transaction.
    */
   public static async fromCBOR(bytes: Uint8Array): Promise<CertifiedMintTransaction> {
-    const data = CborDeserializer.decodeArray(bytes, 2);
-    return new CertifiedMintTransaction(await MintTransaction.fromCBOR(data[0]), InclusionProof.fromCBOR(data[1]));
+    const data = CborDeserializer.decodeArray(bytes, 3);
+    return new CertifiedMintTransaction(
+      await MintTransaction.fromCBOR(data[0]),
+      CborDeserializer.decodeUnsignedInteger(data[1]),
+      InclusionProof.fromCBOR(data[2]),
+    );
   }
 
   /**
@@ -130,12 +136,28 @@ export class CertifiedMintTransaction implements ITransaction {
     transaction: MintTransaction,
     inclusionProof: InclusionProof,
   ): Promise<CertifiedMintTransaction> {
+    // The reference time is fixed here, at the moment the transaction is bound
+    // to its first proof. Later verifiers use the carried value: a proof
+    // fetched later may be issued against a later root and would then carry a
+    // different input record time.
+    const referenceTime = inclusionProof.referenceTime;
+    if (referenceTime == null) {
+      throw new VerificationError(
+        'Inclusion proof verification failed',
+        new VerificationResult(
+          'InclusionProofVerificationRule',
+          InclusionProofVerificationStatus.MISSING_REFERENCE_TIME,
+        ),
+      );
+    }
+
     const result = await InclusionProofVerificationRule.verify(
       trustBase,
       predicateVerifier,
       unicityCertificateVerifier,
       inclusionProof,
       await transaction.calculateTransactionHash(),
+      referenceTime,
       transaction.lockScript,
       transaction.sourceStateHash,
     );
@@ -143,7 +165,7 @@ export class CertifiedMintTransaction implements ITransaction {
       throw new VerificationError('Inclusion proof verification failed', result);
     }
 
-    return new CertifiedMintTransaction(transaction, inclusionProof);
+    return new CertifiedMintTransaction(transaction, referenceTime, inclusionProof);
   }
 
   /**
@@ -164,7 +186,11 @@ export class CertifiedMintTransaction implements ITransaction {
    * @inheritDoc
    */
   public toCBOR(): Uint8Array {
-    return CborSerializer.encodeArray(this.transaction.toCBOR(), this.inclusionProof.toCBOR());
+    return CborSerializer.encodeArray(
+      this.transaction.toCBOR(),
+      CborSerializer.encodeUnsignedInteger(this.referenceTime),
+      this.inclusionProof.toCBOR(),
+    );
   }
 
   /**
@@ -174,6 +200,7 @@ export class CertifiedMintTransaction implements ITransaction {
     return dedent`
       CertifiedMintTransaction
         ${this.transaction.toString()}
+        Reference Time: ${this.referenceTime.toString()}
         ${this.inclusionProof.toString()}`;
   }
 }

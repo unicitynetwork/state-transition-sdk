@@ -139,6 +139,7 @@ class WorkerTransferTransaction {
     private readonly bytes: Uint8Array,
     public readonly sourceStateHash: DataHash,
     public readonly lockScript: EncodedPredicate,
+    public readonly referenceTime: bigint,
     public readonly inclusionProof: InclusionProof,
   ) {}
 
@@ -150,13 +151,14 @@ class WorkerTransferTransaction {
    */
   public static fromCBOR(bytes: Uint8Array): WorkerTransferTransaction {
     const data = CborDeserializer.decodeArray(bytes, 3);
-    const certified = CborDeserializer.decodeArray(data[0], 2);
+    const certified = CborDeserializer.decodeArray(data[0], 3);
 
     return new WorkerTransferTransaction(
       certified[0],
       DataHash.fromImprint(CborDeserializer.decodeByteString(data[1])),
       EncodedPredicate.fromCBOR(data[2]),
-      InclusionProof.fromCBOR(certified[1]),
+      CborDeserializer.decodeUnsignedInteger(certified[1]),
+      InclusionProof.fromCBOR(certified[2]),
     );
   }
 
@@ -204,6 +206,7 @@ class WorkerTransferTransaction {
       unicityCertificateVerifier,
       this.inclusionProof,
       await this.calculateTransactionHash(),
+      this.referenceTime,
       this.lockScript,
       this.sourceStateHash,
     );

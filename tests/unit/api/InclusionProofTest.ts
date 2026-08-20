@@ -4,6 +4,7 @@ import { UnicityCertificateVerifier } from '../../../src/api/bft/verification/Un
 import { CertificationData } from '../../../src/api/CertificationData.js';
 import { InclusionCertificate } from '../../../src/api/InclusionCertificate.js';
 import { InclusionProof } from '../../../src/api/InclusionProof.js';
+import { calculateLeafValue } from '../../../src/api/LeafValue.js';
 import { NetworkId } from '../../../src/api/NetworkId.js';
 import { StateId } from '../../../src/api/StateId.js';
 import { DataHash } from '../../../src/crypto/hash/DataHash.js';
@@ -27,6 +28,7 @@ import { createUnicityCertificate } from '../../utils/UnicityCertificateFixture.
 import { createUnicityCertificateVerifier } from '../../utils/UnicityCertificateVerifierFixture.js';
 
 describe('InclusionProof', () => {
+  const REFERENCE_TIME = 1755000000n;
   const signingService = new SigningService(
     new Uint8Array(HexConverter.decode('0000000000000000000000000000000000000000000000000000000000000001')),
   );
@@ -45,7 +47,7 @@ describe('InclusionProof', () => {
     const stateId = await StateId.fromTransaction(transaction);
     certificationData = await CertificationData.fromMintTransaction(transaction);
 
-    await smt.addLeaf(stateId.data, certificationData.transactionHash.data);
+    await smt.addLeaf(stateId.data, (await calculateLeafValue(certificationData.transactionHash, REFERENCE_TIME)).data);
 
     const root = await smt.calculateRoot();
 
@@ -60,14 +62,15 @@ describe('InclusionProof', () => {
   it('should encode and decode cbor', () => {
     const inclusionProof = new InclusionProof(
       CertificationData.fromCBOR(certificationData.toCBOR()),
+      REFERENCE_TIME,
       inclusionCertificate,
       unicityCertificate,
     );
 
     expect(InclusionProof.fromCBOR(inclusionProof.toCBOR())).toStrictEqual(inclusionProof);
 
-    expect(InclusionProof.fromCBOR(new InclusionProof(null, null, unicityCertificate).toCBOR())).toStrictEqual(
-      new InclusionProof(null, null, unicityCertificate),
+    expect(InclusionProof.fromCBOR(new InclusionProof(null, null, null, unicityCertificate).toCBOR())).toStrictEqual(
+      new InclusionProof(null, null, null, unicityCertificate),
     );
   });
 
@@ -78,8 +81,9 @@ describe('InclusionProof', () => {
         trustBase,
         predicateVerifier,
         unicityCertificateVerifier,
-        new InclusionProof(certificationData, inclusionCertificate, unicityCertificate),
+        new InclusionProof(certificationData, REFERENCE_TIME, inclusionCertificate, unicityCertificate),
         transactionHash,
+        REFERENCE_TIME,
         transaction.lockScript,
         transaction.sourceStateHash,
       ).then((result) => result.status),
@@ -90,8 +94,9 @@ describe('InclusionProof', () => {
         trustBase,
         predicateVerifier,
         unicityCertificateVerifier,
-        new InclusionProof(certificationData, null, unicityCertificate),
+        new InclusionProof(certificationData, REFERENCE_TIME, null, unicityCertificate),
         transactionHash,
+        REFERENCE_TIME,
         transaction.lockScript,
         transaction.sourceStateHash,
       ).then((result) => result.status),
@@ -116,6 +121,7 @@ describe('InclusionProof', () => {
           ),
         ),
       ),
+      REFERENCE_TIME,
       inclusionCertificate,
       unicityCertificate,
     );
@@ -126,6 +132,7 @@ describe('InclusionProof', () => {
         unicityCertificateVerifier,
         invalidTransactionHashInclusionProof,
         await transaction.calculateTransactionHash(),
+        REFERENCE_TIME,
         transaction.lockScript,
         transaction.sourceStateHash,
       ).then((result) => result.status),
@@ -146,6 +153,7 @@ describe('InclusionProof', () => {
           ),
         ),
       ),
+      REFERENCE_TIME,
       inclusionCertificate,
       unicityCertificate,
     );
@@ -157,14 +165,42 @@ describe('InclusionProof', () => {
         unicityCertificateVerifier,
         inclusionProof,
         await transaction.calculateTransactionHash(),
+        REFERENCE_TIME,
         transaction.lockScript,
         transaction.sourceStateHash,
       ).then((result) => result.status),
     ).resolves.toEqual(InclusionProofVerificationStatus.NOT_AUTHENTICATED);
   });
 
+  it('verification fails when the reference time does not match the certified leaf', async () => {
+    const inclusionProof = new InclusionProof(
+      certificationData,
+      REFERENCE_TIME,
+      inclusionCertificate,
+      unicityCertificate,
+    );
+
+    await expect(
+      InclusionProofVerificationRule.verify(
+        trustBase,
+        predicateVerifier,
+        unicityCertificateVerifier,
+        inclusionProof,
+        await transaction.calculateTransactionHash(),
+        REFERENCE_TIME + 1n,
+        transaction.lockScript,
+        transaction.sourceStateHash,
+      ).then((result) => result.status),
+    ).resolves.toEqual(InclusionProofVerificationStatus.PATH_INVALID);
+  });
+
   it('verification fails with invalid trustbase', async () => {
-    const inclusionProof = new InclusionProof(certificationData, inclusionCertificate, unicityCertificate);
+    const inclusionProof = new InclusionProof(
+      certificationData,
+      REFERENCE_TIME,
+      inclusionCertificate,
+      unicityCertificate,
+    );
 
     await expect(
       InclusionProofVerificationRule.verify(
@@ -173,6 +209,7 @@ describe('InclusionProof', () => {
         unicityCertificateVerifier,
         inclusionProof,
         await transaction.calculateTransactionHash(),
+        REFERENCE_TIME,
         transaction.lockScript,
         transaction.sourceStateHash,
       ).then((result) => result.status),

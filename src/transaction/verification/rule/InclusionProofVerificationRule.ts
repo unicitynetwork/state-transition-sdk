@@ -2,6 +2,7 @@ import { ShardIdMatchesStateIdRule } from './ShardIdMatchesStateIdRule.js';
 import { RootTrustBase } from '../../../api/bft/RootTrustBase.js';
 import { UnicityCertificateVerifier } from '../../../api/bft/verification/UnicityCertificateVerifier.js';
 import { InclusionProof } from '../../../api/InclusionProof.js';
+import { calculateLeafValue } from '../../../api/LeafValue.js';
 import { StateId } from '../../../api/StateId.js';
 import { DataHash } from '../../../crypto/hash/DataHash.js';
 import { HashAlgorithm } from '../../../crypto/hash/HashAlgorithm.js';
@@ -18,6 +19,7 @@ export enum InclusionProofVerificationStatus {
   MISSING_CERTIFICATION_DATA = 'MISSING_CERTIFICATION_DATA',
   CERTIFICATION_DATA_MISMATCH = 'CERTIFICATION_DATA_MISMATCH',
   TRANSACTION_HASH_MISMATCH = 'TRANSACTION_HASH_MISMATCH',
+  MISSING_REFERENCE_TIME = 'MISSING_REFERENCE_TIME',
   NOT_AUTHENTICATED = 'NOT_AUTHENTICATED',
   INCLUSION_CERTIFICATE_MISSING = 'INCLUSION_CERTIFICATE_MISSING',
   PATH_INVALID = 'PATH_INVALID',
@@ -38,6 +40,7 @@ export class InclusionProofVerificationRule {
    * @param {PredicateVerifierService} predicateVerifierFactory Predicate verifier service.
    * @param {InclusionProof} inclusionProof Inclusion proof to verify.
    * @param {DataHash} transactionHash Canonical hash of the transaction.
+   * @param {bigint} referenceTime Reference time the transition was validated under.
    * @param {EncodedPredicate} lockScript Lock script the transaction unlocks.
    * @param {DataHash} sourceStateHash Hash of the state the transaction spends.
    * @returns {Promise<VerificationResult<InclusionProofVerificationStatus>>} Verification outcome.
@@ -48,6 +51,7 @@ export class InclusionProofVerificationRule {
     unicityCertificateVerifier: UnicityCertificateVerifier,
     inclusionProof: InclusionProof,
     transactionHash: DataHash,
+    referenceTime: bigint,
     lockScript: EncodedPredicate,
     sourceStateHash: DataHash,
   ): Promise<VerificationResult<InclusionProofVerificationStatus>> {
@@ -84,9 +88,14 @@ export class InclusionProofVerificationRule {
     }
 
     const stateId = await StateId.fromCertificationData(certificationData);
+    // The leaf value binds the reference time the transition was validated
+    // under. It is taken from the caller, not from the proof's own unicity
+    // certificate: the tree is append-only, so the proof may have been issued
+    // against a later root whose input record carries a later reference time.
+    const leafValue = await calculateLeafValue(certificationData.transactionHash, referenceTime);
     const result = await inclusionProof.inclusionCertificate.verify(
       stateId,
-      certificationData.transactionHash,
+      leafValue,
       new DataHash(HashAlgorithm.SHA256, inclusionProof.unicityCertificate.inputRecord.hash),
     );
     if (!result) {
@@ -119,6 +128,7 @@ export class InclusionProofVerificationRule {
 
     const predicateVerificationResult = await predicateVerifierFactory.verify(
       lockScript,
+      referenceTime,
       sourceStateHash,
       certificationData.transactionHash,
       certificationData.unlockScript,

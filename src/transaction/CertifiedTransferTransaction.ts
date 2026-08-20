@@ -12,6 +12,7 @@ import { CborDeserializer } from '../serialization/cbor/CborDeserializer.js';
 import { CborSerializer } from '../serialization/cbor/CborSerializer.js';
 import { dedent } from '../util/StringUtils.js';
 import { VerificationError } from '../verification/VerificationError.js';
+import { VerificationResult } from '../verification/VerificationResult.js';
 import {
   InclusionProofVerificationRule,
   InclusionProofVerificationStatus,
@@ -23,6 +24,7 @@ import {
 export class CertifiedTransferTransaction implements ITransaction {
   private constructor(
     private readonly transaction: TransferTransaction,
+    public readonly referenceTime: bigint,
     public readonly inclusionProof: InclusionProof,
   ) {}
 
@@ -69,10 +71,11 @@ export class CertifiedTransferTransaction implements ITransaction {
    * @returns {Promise<CertifiedTransferTransaction>} Decoded certified transaction.
    */
   public static async fromCBOR(bytes: Uint8Array, token: Token): Promise<CertifiedTransferTransaction> {
-    const data = CborDeserializer.decodeArray(bytes, 2);
+    const data = CborDeserializer.decodeArray(bytes, 3);
     return new CertifiedTransferTransaction(
       await TransferTransaction.fromCBOR(data[0], token),
-      InclusionProof.fromCBOR(data[1]),
+      CborDeserializer.decodeUnsignedInteger(data[1]),
+      InclusionProof.fromCBOR(data[2]),
     );
   }
 
@@ -94,12 +97,28 @@ export class CertifiedTransferTransaction implements ITransaction {
     transaction: TransferTransaction,
     inclusionProof: InclusionProof,
   ): Promise<CertifiedTransferTransaction> {
+    // The reference time is fixed here, at the moment the transaction is bound
+    // to its first proof. Later verifiers use the carried value: a proof
+    // fetched later may be issued against a later root and would then carry a
+    // different input record time.
+    const referenceTime = inclusionProof.referenceTime;
+    if (referenceTime == null) {
+      throw new VerificationError(
+        'Inclusion proof verification failed',
+        new VerificationResult(
+          'InclusionProofVerificationRule',
+          InclusionProofVerificationStatus.MISSING_REFERENCE_TIME,
+        ),
+      );
+    }
+
     const result = await InclusionProofVerificationRule.verify(
       trustBase,
       predicateVerifier,
       unicityCertificateVerifier,
       inclusionProof,
       await transaction.calculateTransactionHash(),
+      referenceTime,
       transaction.lockScript,
       transaction.sourceStateHash,
     );
@@ -107,7 +126,7 @@ export class CertifiedTransferTransaction implements ITransaction {
       throw new VerificationError('Inclusion proof verification failed', result);
     }
 
-    return new CertifiedTransferTransaction(transaction, inclusionProof);
+    return new CertifiedTransferTransaction(transaction, referenceTime, inclusionProof);
   }
 
   /**
@@ -128,7 +147,11 @@ export class CertifiedTransferTransaction implements ITransaction {
    * @inheritDoc
    */
   public toCBOR(): Uint8Array {
-    return CborSerializer.encodeArray(this.transaction.toCBOR(), this.inclusionProof.toCBOR());
+    return CborSerializer.encodeArray(
+      this.transaction.toCBOR(),
+      CborSerializer.encodeUnsignedInteger(this.referenceTime),
+      this.inclusionProof.toCBOR(),
+    );
   }
 
   /**
@@ -138,6 +161,7 @@ export class CertifiedTransferTransaction implements ITransaction {
     return dedent`
       CertifiedTransferTransaction
         ${this.transaction.toString()}
+        Reference Time: ${this.referenceTime.toString()}
         ${this.inclusionProof.toString()}`;
   }
 }

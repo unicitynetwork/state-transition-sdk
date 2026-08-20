@@ -26,6 +26,7 @@ export class CertifiedTransferTransactionVerificationRule {
       verificationContext.unicityCertificateVerifier,
       transaction.inclusionProof,
       await transaction.calculateTransactionHash(),
+      transaction.referenceTime,
       transaction.lockScript,
       transaction.sourceStateHash,
     );

@@ -5,6 +5,7 @@ import { IAggregatorClient } from '../../src/api/IAggregatorClient.js';
 import { InclusionCertificate } from '../../src/api/InclusionCertificate.js';
 import { InclusionProof } from '../../src/api/InclusionProof.js';
 import { InclusionProofResponse } from '../../src/api/InclusionProofResponse.js';
+import { calculateLeafValue } from '../../src/api/LeafValue.js';
 import { StateId } from '../../src/api/StateId.js';
 import { DataHasher } from '../../src/crypto/hash/DataHasher.js';
 import { DataHasherFactory } from '../../src/crypto/hash/DataHasherFactory.js';
@@ -21,9 +22,19 @@ import { createUnicityCertificate } from '../utils/UnicityCertificateFixture.js'
  * Test aggregator client implementation that stores all submitted certification requests in memory.
  */
 export class TestAggregatorClient implements IAggregatorClient {
+  /** Reference time the first round runs under. */
+  private static readonly FIRST_REFERENCE_TIME = 1755000000n;
+
   public readonly rootTrustBase: RootTrustBase;
   private readonly predicateVerifier: PredicateVerifierService;
-  private readonly requests: Map<bigint, CertificationData> = new Map();
+  /**
+   * Reference time of the current round. Every accepted request is its own
+   * round here, so a proof served later is anchored to a certificate whose
+   * input record time is past the one the leaf was built from, exactly as it
+   * is against a live aggregator.
+   */
+  private referenceTime: bigint = TestAggregatorClient.FIRST_REFERENCE_TIME;
+  private readonly requests: Map<bigint, { certificationData: CertificationData; referenceTime: bigint }> = new Map();
 
   private constructor(
     private readonly smt: SparseMerkleTree,
@@ -51,24 +62,21 @@ export class TestAggregatorClient implements IAggregatorClient {
     const path = BitString.fromBytesBigEndian(stateId.data).toBigInt();
     const root = await this.smt.calculateRoot();
 
-    if (!this.requests.has(path)) {
-      return Promise.resolve(
-        new InclusionProofResponse(
-          1n,
-          new InclusionProof(null, null, await createUnicityCertificate(root.hash, this.signingService)),
-        ),
-      );
-    }
+    const unicityCertificate = await createUnicityCertificate(root.hash, this.signingService, this.referenceTime);
+    const record = this.requests.get(path);
 
-    const certificationData = this.requests.get(path);
+    if (!record) {
+      return Promise.resolve(new InclusionProofResponse(1n, new InclusionProof(null, null, null, unicityCertificate)));
+    }
 
     return Promise.resolve(
       new InclusionProofResponse(
         1n,
         new InclusionProof(
-          certificationData ?? null,
+          record.certificationData,
+          record.referenceTime,
           InclusionCertificate.create(root, stateId.data),
-          await createUnicityCertificate(root.hash, this.signingService),
+          unicityCertificate,
         ),
       ),
     );
@@ -82,6 +90,7 @@ export class TestAggregatorClient implements IAggregatorClient {
 
     const result = await this.predicateVerifier.verify(
       certificationData.lockScript,
+      this.referenceTime,
       certificationData.sourceStateHash,
       certificationData.transactionHash,
       certificationData.unlockScript,
@@ -93,9 +102,11 @@ export class TestAggregatorClient implements IAggregatorClient {
 
     const path = BitString.fromBytesBigEndian(stateId.data).toBigInt();
     if (!this.requests.has(path)) {
-      const leafValue = certificationData.transactionHash;
+      const referenceTime = this.referenceTime;
+      const leafValue = await calculateLeafValue(certificationData.transactionHash, referenceTime);
       await this.smt.addLeaf(stateId.data, leafValue.data);
-      this.requests.set(path, certificationData);
+      this.requests.set(path, { certificationData, referenceTime });
+      this.referenceTime += 1n;
     }
 
     return CertificationResponse.create(CertificationStatus.SUCCESS);

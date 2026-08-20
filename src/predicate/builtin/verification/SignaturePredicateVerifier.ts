@@ -30,6 +30,7 @@ export class SignaturePredicateVerifier implements IBuiltInPredicateVerifier {
    */
   public async verify(
     encodedPredicate: EncodedPredicate,
+    _referenceTime: bigint,
     sourceStateHash: DataHash,
     transactionHash: DataHash,
     unlockScriptBytes: Uint8Array,

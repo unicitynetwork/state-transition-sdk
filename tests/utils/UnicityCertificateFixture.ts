@@ -16,8 +16,9 @@ import { CborSerializer } from '../../src/serialization/cbor/CborSerializer.js';
 export async function createUnicityCertificate(
   rootHash: DataHash,
   signingService: SigningService,
+  timestamp: bigint = 0n,
 ): Promise<UnicityCertificate> {
-  const inputRecord = new InputRecord(0n, 0n, null, rootHash.data, new Uint8Array(0), 0n, null, 0n, null);
+  const inputRecord = new InputRecord(0n, 0n, null, rootHash.data, new Uint8Array(0), timestamp, null, 0n, null);
   const technicalRecordHash = null;
   const shardConfigurationHash = new Uint8Array(32);
   const shardTreeCertificate = new ShardTreeCertificate(ShardId.decode(new Uint8Array([0b10000000])), []);

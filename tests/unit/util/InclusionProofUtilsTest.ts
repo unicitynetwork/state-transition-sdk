@@ -84,6 +84,7 @@ describe('waitInclusionProof', () => {
     pendingProof = new InclusionProof(
       null,
       null,
+      null,
       await createUnicityCertificate(new DataHash(HashAlgorithm.SHA256, new Uint8Array(32)), signingService),
     );
   });

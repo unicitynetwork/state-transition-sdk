@@ -48,6 +48,7 @@ export class PredicateVerifierService {
    * Verify given predicate with registered predicate verifiers.
    *
    * @param {EncodedPredicate} predicate Predicate being unlocked.
+   * @param {bigint} referenceTime Reference time the transition was validated under.
    * @param {DataHash} sourceStateHash Hash of the state being spent.
    * @param {DataHash} transactionHash Hash of the spending transaction.
    * @param {Uint8Array} unlockScript Witness bytes for the predicate.
@@ -56,6 +57,7 @@ export class PredicateVerifierService {
    */
   public verify(
     predicate: EncodedPredicate,
+    referenceTime: bigint,
     sourceStateHash: DataHash,
     transactionHash: DataHash,
     unlockScript: Uint8Array,
@@ -65,6 +67,6 @@ export class PredicateVerifierService {
       throw new Error('Unsupported predicate engine.');
     }
 
-    return verifier.verify(predicate, sourceStateHash, transactionHash, unlockScript);
+    return verifier.verify(predicate, referenceTime, sourceStateHash, transactionHash, unlockScript);
   }
 }

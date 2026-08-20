@@ -178,12 +178,19 @@ export async function waitInclusionProof(
 
   const poll = async (requestSignal: AbortSignal): Promise<InclusionProof | null> => {
     const { inclusionProof } = await client.getInclusionProof(stateId, { signal: requestSignal });
+    if (inclusionProof.referenceTime == null) {
+      // Nothing certified for this state id yet; an inclusion proof always
+      // carries the reference time its leaf value was built from.
+      return null;
+    }
+
     const verificationStatus = await InclusionProofVerificationRule.verify(
       trustBase,
       predicateVerifier,
       unicityCertificateVerifier,
       inclusionProof,
       transactionHash,
+      inclusionProof.referenceTime,
       transaction.lockScript,
       transaction.sourceStateHash,
     );

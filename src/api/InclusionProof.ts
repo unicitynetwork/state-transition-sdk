@@ -16,11 +16,13 @@ export class InclusionProof {
   /**
    * Constructs an InclusionProof instance.
    * @param certificationData Certification data.
+   * @param referenceTime Reference time of the round the leaf was created in.
    * @param inclusionCertificate Inclusion certificate.
    * @param unicityCertificate Unicity certificate.
    */
   public constructor(
     public readonly certificationData: CertificationData | null,
+    public readonly referenceTime: bigint | null,
     public readonly inclusionCertificate: InclusionCertificate | null,
     public readonly unicityCertificate: UnicityCertificate,
   ) {}
@@ -43,7 +45,7 @@ export class InclusionProof {
       throw new CborError(`Invalid CBOR tag for InclusionProof: ${tag.tag}`);
     }
 
-    const data = CborDeserializer.decodeArray(tag.data, 4);
+    const data = CborDeserializer.decodeArray(tag.data, 5);
     const version = CborDeserializer.decodeUnsignedInteger(data[0]);
     if (version !== InclusionProof.VERSION) {
       throw new CborError(`Unsupported InclusionProof version: ${version}`);
@@ -51,10 +53,11 @@ export class InclusionProof {
 
     return new InclusionProof(
       CborDeserializer.decodeNullable(data[1], CertificationData.fromCBOR),
-      CborDeserializer.decodeNullable(data[2], (inclusionCertificate) =>
+      CborDeserializer.decodeNullable(data[2], CborDeserializer.decodeUnsignedInteger),
+      CborDeserializer.decodeNullable(data[3], (inclusionCertificate) =>
         InclusionCertificate.decode(CborDeserializer.decodeByteString(inclusionCertificate)),
       ),
-      UnicityCertificate.fromCBOR(data[3]),
+      UnicityCertificate.fromCBOR(data[4]),
     );
   }
 
@@ -68,6 +71,9 @@ export class InclusionProof {
       CborSerializer.encodeArray(
         CborSerializer.encodeUnsignedInteger(this.version),
         CborSerializer.encodeNullable(this.certificationData, (certificationData) => certificationData.toCBOR()),
+        CborSerializer.encodeNullable(this.referenceTime, (referenceTime) =>
+          CborSerializer.encodeUnsignedInteger(referenceTime),
+        ),
         CborSerializer.encodeNullable(this.inclusionCertificate, (inclusionCertificate) =>
           CborSerializer.encodeByteString(inclusionCertificate.encode()),
         ),
@@ -83,6 +89,7 @@ export class InclusionProof {
   public toString(): string {
     return dedent`
       Inclusion Proof
+        Reference Time: ${this.referenceTime?.toString() ?? 'null'}
         ${this.inclusionCertificate?.toString()}
         ${this.certificationData?.toString()}
         ${this.unicityCertificate.toString()}`;
