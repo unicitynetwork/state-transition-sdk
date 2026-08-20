@@ -76,8 +76,8 @@ I --> J[End]
 
 A `Token` is a self-contained, CBOR-serializable record that bundles its genesis with an ordered transfer history:
 
-- `genesis`: a `CertifiedMintTransaction` (a `MintTransaction` plus the reference time it was certified under and its `InclusionProof`). The mint transaction carries `networkId`, `tokenId`, `tokenType`, `salt`, `recipient`, optional `justification`, and optional `data`.
-- `transactions`: an ordered list of `CertifiedTransferTransaction` entries, each wrapping a `TransferTransaction` (recipient, state mask, optional data) with its reference time and `InclusionProof`.
+- `genesis`: a `CertifiedMintTransaction` (a `MintTransaction` plus the reference time it was certified under and its `InclusionProof`). The mint transaction carries `networkId`, `tokenId`, `tokenType`, `salt`, `recipient`, an exclusive request timeout, optional `justification`, and optional `data`.
+- `transactions`: an ordered list of `CertifiedTransferTransaction` entries, each wrapping a `TransferTransaction` (recipient, state mask, exclusive request timeout, optional data) with its reference time and `InclusionProof`.
 
 Every transaction carries an exclusive certification request timeout. The Unicity Service admits the request only in a round whose reference time is strictly below it, and the timeout is part of the transaction encoding, so the transaction hash commits to it and the unlock script signs it. An expired request is rejected rather than certified late.
 
