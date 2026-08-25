@@ -228,11 +228,9 @@ describe('InclusionProof', () => {
     ).resolves.toEqual(InclusionProofVerificationStatus.NOT_AUTHENTICATED);
   });
 
-  // The service alone chooses a leaf's reference time, so without an
-  // independent bound it could back-date one and slip a request past its own
-  // deadline. Consensus signs the round's timestamp and a leaf cannot predate
-  // the round certifying it, so a leaf claiming to be newer than its round is
-  // rejected.
+  // A leaf cannot postdate the round that certified it, and consensus signs
+  // that round's timestamp, so a leaf claiming to be newer than its own round
+  // is an impossible pairing and is rejected.
   it('verification fails when the leaf claims a reference time after its certifying round', async () => {
     // Same certified root, but the round certifying it reports a clock earlier
     // than the leaf claims to have been created at.
@@ -250,6 +248,53 @@ describe('InclusionProof', () => {
         transaction.sourceStateHash,
       ).then((result) => result.status),
     ).resolves.toEqual(InclusionProofVerificationStatus.REFERENCE_TIME_AFTER_ROUND);
+  });
+
+  // Documents a gap this rule does NOT close, so that it stays visible and this
+  // test fails loudly if it is ever closed.
+  //
+  // The bound above is one-sided, and the useful direction is the other one. A
+  // service that receives a request after its deadline can insert the leaf now
+  // and write a pre-deadline reference time into it: the expiry check passes
+  // because that value is below the deadline, the bound above passes because
+  // the certifying round is later still, and the SMT path authenticates the
+  // value the service chose rather than when it chose it. Closing this needs
+  // signed evidence of the creation round, which an inclusion proof does not
+  // carry.
+  it('accepts a leaf back-dated by a dishonest service, which it cannot detect', async () => {
+    const deadline = REFERENCE_TIME;
+    const backDated = deadline - 1n;
+    const late = await MintTransaction.create(NetworkId.LOCAL, SignaturePredicate.fromSigningService(signingService), {
+      expiresAt: deadline,
+      salt: transaction.salt,
+      tokenType: transaction.tokenType,
+    });
+    const lateCertificationData = await CertificationData.fromMintTransaction(late);
+    const stateId = await StateId.fromTransaction(late);
+
+    // Built now, but claiming to have been created before the deadline.
+    const smt = new SparseMerkleTree(new DataHasherFactory(HashAlgorithm.SHA256, NodeDataHasher));
+    await smt.addLeaf(stateId.data, (await calculateLeafValue(lateCertificationData.transactionHash, backDated)).data);
+    const root = await smt.calculateRoot();
+
+    await expect(
+      InclusionProofVerificationRule.verify(
+        trustBase,
+        predicateVerifier,
+        unicityCertificateVerifier,
+        new InclusionProof(
+          lateCertificationData,
+          backDated,
+          InclusionCertificate.create(root, stateId.data),
+          // A round certified long after the deadline had passed.
+          await createUnicityCertificate(root.hash, signingService, deadline + 4000n),
+        ),
+        await late.calculateTransactionHash(),
+        late.expiresAt,
+        late.lockScript,
+        late.sourceStateHash,
+      ).then((result) => result.status),
+    ).resolves.toEqual(InclusionProofVerificationStatus.OK);
   });
 
   it('verification fails when the reference time has reached the request timeout', async () => {

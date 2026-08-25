@@ -126,14 +126,21 @@ export class InclusionProofVerificationRule {
       return new VerificationResult('InclusionProofVerificationRule', InclusionProofVerificationStatus.REQUEST_EXPIRED);
     }
 
-    // The service alone picks the leaf's reference time, and the SMT path proves
-    // only that it committed to whatever it picked — on its own that lets a
-    // service back-date a leaf and admit a request its deadline should have
-    // killed. Consensus signs the round's own timestamp, which is that round's
-    // reference time, and a leaf cannot predate the round that certifies it, so
-    // this is a signed upper bound available for free. The tree is append-only,
-    // so a proof re-fetched later is certified by a later round and the bound
-    // only loosens.
+    // A leaf cannot postdate the round that certified it. Consensus signs the
+    // round's timestamp, which is that round's own reference time, so this is a
+    // free signed upper bound; the tree is append-only, so a proof re-fetched
+    // later is certified by a later round and the bound only loosens.
+    //
+    // It bounds the reference time in one direction only, and the useful
+    // direction is the other one. Nothing here establishes when the leaf was
+    // actually created: a service that receives a request after its deadline T
+    // can insert the leaf now and write referenceTime = T - 1 into it, and both
+    // that value and this round's later timestamp satisfy every check in this
+    // rule. Enforcing a deadline against a dishonest service needs signed
+    // evidence of the creation round, which an inclusion proof does not carry —
+    // see the note in README.md. What this rule can establish is that the leaf
+    // is internally consistent and that an honest service admitted the request
+    // before its deadline.
     if (referenceTime > inclusionProof.unicityCertificate.inputRecord.timestamp) {
       return new VerificationResult(
         'InclusionProofVerificationRule',

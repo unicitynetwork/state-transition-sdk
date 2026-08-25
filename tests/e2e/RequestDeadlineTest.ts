@@ -124,9 +124,10 @@ describe('E2E request deadline', () => {
         transaction.toCertifiedTransaction(trustBase, predicateVerifier, unicityCertificateVerifier, proof),
       ).resolves.toBeDefined();
 
-      // And reject the same leaf presented against an earlier round, which is
-      // how a service would back-date a leaf to slip a request past its
-      // deadline. Consensus signs the round timestamp, so it cannot.
+      // And reject the same leaf presented against a round whose signed clock
+      // precedes it, which no aggregator can produce. Note this bounds the
+      // reference time from above only; it does not establish when the leaf was
+      // created, so it does not stop a dishonest service back-dating one.
       const backDated = new InclusionProof(
         proof.certificationData,
         proof.referenceTime! + 1n,

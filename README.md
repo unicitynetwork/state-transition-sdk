@@ -93,6 +93,27 @@ See [`src/transaction/Token.ts`](./src/transaction/Token.ts) for the authoritati
 - **Predicate flexibility**: Multiple ownership models supported
 - **Provenance tracking**: Complete audit trail in token history
 
+#### Request deadlines are enforced by the service, not by verification
+
+A request may carry an exclusive deadline (`expiresAt`), and the Unicity Service
+only admits it to a round whose reference time is strictly below that deadline.
+Verification re-checks the deadline against the reference time the leaf reports,
+and rejects a leaf claiming to postdate the round that certified it.
+
+Neither check establishes *when* the leaf was created. The reference time is
+chosen by the service, and the inclusion proof authenticates the value it chose
+rather than the moment it chose it: a service that receives a request after its
+deadline can insert the leaf later and record a pre-deadline reference time in
+it, and every client-side check still passes. Closing that would need signed
+evidence of the creation round, which an inclusion proof does not currently
+carry.
+
+So treat `expiresAt` as an instruction to an honest service — the guarantee that
+a late request is dropped rather than executed — and not as something a verifier
+can prove after the fact. It is not a defence against a service that is itself
+dishonest; that case is covered by consensus over the aggregator, not by this
+field.
+
 ## Development
 
 ### Building
