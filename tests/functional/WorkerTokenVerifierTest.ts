@@ -8,8 +8,10 @@ import { UnicityCertificateVerifier } from '../../src/api/bft/verification/Unici
 import { SigningService } from '../../src/crypto/secp256k1/SigningService.js';
 import { SignaturePredicate } from '../../src/predicate/builtin/SignaturePredicate.js';
 import { PredicateVerifierService } from '../../src/predicate/verification/PredicateVerifierService.js';
+import { CborDeserializer } from '../../src/serialization/cbor/CborDeserializer.js';
 import { StateTransitionClient } from '../../src/StateTransitionClient.js';
 import { Token } from '../../src/transaction/Token.js';
+import { TransferTransaction } from '../../src/transaction/TransferTransaction.js';
 import { TokenVerifier } from '../../src/transaction/verification/default/TokenVerifier.js';
 import { IVerificationContext } from '../../src/transaction/verification/IVerificationContext.js';
 import { MintJustificationVerifierService } from '../../src/transaction/verification/MintJustificationVerifierService.js';
@@ -24,6 +26,7 @@ import {
   WorkerTokenVerifier,
 } from '../../src/transaction/verification/worker/WorkerTokenVerifier.js';
 import { VerificationStatus } from '../../src/verification/VerificationStatus.js';
+import { expiresAt } from '../utils/ExpiresAt.js';
 import { mintToken, transferToken } from '../utils/TokenUtils.js';
 import { createUnicityCertificateVerifier } from '../utils/UnicityCertificateVerifierFixture.js';
 
@@ -103,7 +106,10 @@ describe('WorkerTokenVerifier', () => {
     );
 
   // Mint a token and transfer it twice (alice -> bob -> carol), yielding two transfers.
-  const mintWithTwoTransfers = async (context: IVerificationContext): Promise<Token> => {
+  const mintWithTwoTransfers = async (
+    context: IVerificationContext,
+    deadline: bigint | null = null,
+  ): Promise<Token> => {
     const alice = SigningService.generate();
     const bob = SigningService.generate();
     const carol = SigningService.generate();
@@ -114,6 +120,10 @@ describe('WorkerTokenVerifier', () => {
       SignaturePredicate.create(alice.publicKey),
       null,
       trustBase.networkId,
+      undefined,
+      undefined,
+      null,
+      deadline,
     );
     const bobToken = await transferToken(
       client,
@@ -121,9 +131,10 @@ describe('WorkerTokenVerifier', () => {
       aliceToken.toCBOR(),
       SignaturePredicate.create(bob.publicKey),
       alice,
+      deadline,
     );
 
-    return transferToken(client, context, bobToken.toCBOR(), SignaturePredicate.create(carol.publicKey), bob);
+    return transferToken(client, context, bobToken.toCBOR(), SignaturePredicate.create(carol.publicKey), bob, deadline);
   };
 
   // Shared across the tests below; minted once because certification is expensive.
@@ -146,6 +157,44 @@ describe('WorkerTokenVerifier', () => {
       expect(result.status).toEqual(VerificationStatus.OK);
       verifier.dispose();
     }
+  }, 30000);
+
+  it('verifies transfers that carry an explicit deadline', async () => {
+    // Every other token in this suite leaves the deadline null, so without this
+    // the non-null path across the worker boundary never runs.
+    const deadline = expiresAt();
+    const deadlineContext = createContext();
+    const deadlineToken = await mintWithTwoTransfers(deadlineContext, deadline);
+    expect(deadlineToken.transactions.map((transaction) => transaction.expiresAt)).toEqual([deadline, deadline]);
+
+    const verifier = new TestWorkerTokenVerifier(2);
+    const result = await verifier.verify(deadlineToken, deadlineContext);
+    expect(result.status).toEqual(VerificationStatus.OK);
+    verifier.dispose();
+  }, 30000);
+
+  // The deadline used to travel as a fourth element beside the transfer bytes,
+  // outside the bytes whose SHA-256 is the transaction hash, and the decoder
+  // never compared the two. It is recovered from those bytes now, so there is
+  // no second copy to disagree with them.
+  it('sends the transfer bytes and their chain context, with no separate deadline', async () => {
+    const deadline = expiresAt();
+    const deadlineContext = createContext();
+    const deadlineToken = await mintWithTwoTransfers(deadlineContext, deadline);
+
+    let payload: Uint8Array | undefined;
+    const verifier = new TestWorkerTokenVerifier(1, (request) => {
+      payload ??= request.transfers[0].bytes;
+      return defaultResponder(request);
+    });
+    await verifier.verify(deadlineToken, deadlineContext);
+    verifier.dispose();
+
+    const elements = CborDeserializer.decodeArray(payload!);
+    expect(elements).toHaveLength(3);
+    // The deadline the worker verifies against comes out of element 0, the
+    // transfer bytes the transaction hash commits to.
+    expect(TransferTransaction.expiresAtFromCBOR(CborDeserializer.decodeArray(elements[0], 2)[0])).toEqual(deadline);
   }, 30000);
 
   it('splits transfers across the pool and reuses it over verifications', async () => {

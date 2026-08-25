@@ -76,6 +76,18 @@ describe('SplitBuilder Functional Test', () => {
       verificationContext,
     );
 
+    // The burn transaction the split builds carries the deadline, so the split
+    // is a request boundary like the transaction factories and validates it the
+    // same way, before doing any of the tree work below.
+    await expect(
+      TokenSplit.split(
+        token,
+        TestPaymentData.decode,
+        [SplitTokenRequest.create(predicate, new TestPaymentData(PaymentAssetCollection.create(...assets)))],
+        { expiresAt: 0n },
+      ),
+    ).rejects.toThrow(/Request deadline/);
+
     await expect(
       TokenSplit.split(
         token,

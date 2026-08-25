@@ -24,12 +24,12 @@ import {
 } from '../../../src/transaction/verification/rule/InclusionProofVerificationRule.js';
 import { HexConverter } from '../../../src/util/HexConverter.js';
 import { expiresAt } from '../../utils/ExpiresAt.js';
+import { REFERENCE_TIME } from '../../utils/ReferenceTime.js';
 import { createRootTrustBase } from '../../utils/RootTrustBaseFixture.js';
 import { createUnicityCertificate } from '../../utils/UnicityCertificateFixture.js';
 import { createUnicityCertificateVerifier } from '../../utils/UnicityCertificateVerifierFixture.js';
 
 describe('InclusionProof', () => {
-  const REFERENCE_TIME = 1755000000n;
   const signingService = new SigningService(
     new Uint8Array(HexConverter.decode('0000000000000000000000000000000000000000000000000000000000000001')),
   );
@@ -40,6 +40,7 @@ describe('InclusionProof', () => {
   let certificationData: CertificationData;
   let inclusionCertificate: InclusionCertificate;
   let unicityCertificate: UnicityCertificate;
+  let rootHash: DataHash;
   let trustBase: RootTrustBase;
 
   beforeAll(async () => {
@@ -53,10 +54,11 @@ describe('InclusionProof', () => {
     await smt.addLeaf(stateId.data, (await calculateLeafValue(certificationData.transactionHash, REFERENCE_TIME)).data);
 
     const root = await smt.calculateRoot();
+    rootHash = root.hash;
 
     inclusionCertificate = InclusionCertificate.create(root, stateId.data);
 
-    unicityCertificate = await createUnicityCertificate(root.hash, signingService);
+    unicityCertificate = await createUnicityCertificate(rootHash, signingService);
     trustBase = createRootTrustBase(signingService.publicKey);
     predicateVerifier = PredicateVerifierService.create();
     unicityCertificateVerifier = createUnicityCertificateVerifier();
@@ -106,25 +108,53 @@ describe('InclusionProof', () => {
         new InclusionProof(certificationData, REFERENCE_TIME, inclusionCertificate, unicityCertificate),
         transactionHash,
         transaction.expiresAt,
-        REFERENCE_TIME,
         transaction.lockScript,
         transaction.sourceStateHash,
       ).then((result) => result.status),
     ).resolves.toEqual(InclusionProofVerificationStatus.OK);
 
+    // What the aggregator returns for a state it has not certified yet: all
+    // three leaf fields absent together. The one status a caller polls through.
     await expect(
       InclusionProofVerificationRule.verify(
         trustBase,
         predicateVerifier,
         unicityCertificateVerifier,
-        new InclusionProof(certificationData, REFERENCE_TIME, null, unicityCertificate),
+        new InclusionProof(null, null, null, unicityCertificate),
         transactionHash,
         transaction.expiresAt,
-        REFERENCE_TIME,
         transaction.lockScript,
         transaction.sourceStateHash,
       ).then((result) => result.status),
     ).resolves.toEqual(InclusionProofVerificationStatus.INCLUSION_CERTIFICATE_MISSING);
+  });
+
+  // A proof with some leaf fields but not others establishes neither a leaf nor
+  // its absence. fromCBOR rejects one off the wire, so these are reachable only
+  // hand-built, and each has to name what is missing rather than pass for
+  // "not certified yet" and leave the caller polling to its own deadline.
+  it.each([
+    [null, REFERENCE_TIME, true, InclusionProofVerificationStatus.MISSING_CERTIFICATION_DATA],
+    [true, null, true, InclusionProofVerificationStatus.MISSING_REFERENCE_TIME],
+    [true, REFERENCE_TIME, false, InclusionProofVerificationStatus.INCOMPLETE_INCLUSION_PROOF],
+  ])('reports what a partially present proof is missing', async (hasData, referenceTime, hasCertificate, status) => {
+    await expect(
+      InclusionProofVerificationRule.verify(
+        trustBase,
+        predicateVerifier,
+        unicityCertificateVerifier,
+        new InclusionProof(
+          hasData ? certificationData : null,
+          referenceTime,
+          hasCertificate ? inclusionCertificate : null,
+          unicityCertificate,
+        ),
+        await transaction.calculateTransactionHash(),
+        transaction.expiresAt,
+        transaction.lockScript,
+        transaction.sourceStateHash,
+      ).then((result) => result.status),
+    ).resolves.toEqual(status);
   });
 
   it('verification fails with invalid transaction hash', async () => {
@@ -158,7 +188,6 @@ describe('InclusionProof', () => {
         invalidTransactionHashInclusionProof,
         await transaction.calculateTransactionHash(),
         transaction.expiresAt,
-        REFERENCE_TIME,
         transaction.lockScript,
         transaction.sourceStateHash,
       ).then((result) => result.status),
@@ -193,55 +222,68 @@ describe('InclusionProof', () => {
         inclusionProof,
         await transaction.calculateTransactionHash(),
         transaction.expiresAt,
-        REFERENCE_TIME,
         transaction.lockScript,
         transaction.sourceStateHash,
       ).then((result) => result.status),
     ).resolves.toEqual(InclusionProofVerificationStatus.NOT_AUTHENTICATED);
   });
 
-  it('verification fails when the reference time does not match the certified leaf', async () => {
-    const inclusionProof = new InclusionProof(
-      certificationData,
-      REFERENCE_TIME,
-      inclusionCertificate,
-      unicityCertificate,
-    );
+  // The service alone chooses a leaf's reference time, so without an
+  // independent bound it could back-date one and slip a request past its own
+  // deadline. Consensus signs the round's timestamp and a leaf cannot predate
+  // the round certifying it, so a leaf claiming to be newer than its round is
+  // rejected.
+  it('verification fails when the leaf claims a reference time after its certifying round', async () => {
+    // Same certified root, but the round certifying it reports a clock earlier
+    // than the leaf claims to have been created at.
+    const backDatedRound = await createUnicityCertificate(rootHash, signingService, REFERENCE_TIME - 1n);
 
     await expect(
       InclusionProofVerificationRule.verify(
         trustBase,
         predicateVerifier,
         unicityCertificateVerifier,
-        inclusionProof,
+        new InclusionProof(certificationData, REFERENCE_TIME, inclusionCertificate, backDatedRound),
         await transaction.calculateTransactionHash(),
         transaction.expiresAt,
-        REFERENCE_TIME + 1n,
         transaction.lockScript,
         transaction.sourceStateHash,
       ).then((result) => result.status),
-    ).resolves.toEqual(InclusionProofVerificationStatus.REFERENCE_TIME_MISMATCH);
+    ).resolves.toEqual(InclusionProofVerificationStatus.REFERENCE_TIME_AFTER_ROUND);
   });
 
   it('verification fails when the reference time has reached the request timeout', async () => {
-    const inclusionProof = new InclusionProof(
-      certificationData,
-      REFERENCE_TIME,
-      inclusionCertificate,
-      unicityCertificate,
+    // A leaf whose deadline the round it was created in had already reached.
+    // The deadline is exclusive, so equality is already too late.
+    const expired = await MintTransaction.create(
+      NetworkId.LOCAL,
+      SignaturePredicate.fromSigningService(signingService),
+      { expiresAt: REFERENCE_TIME, salt: transaction.salt, tokenType: transaction.tokenType },
     );
+    const expiredCertificationData = await CertificationData.fromMintTransaction(expired);
+    const smt = new SparseMerkleTree(new DataHasherFactory(HashAlgorithm.SHA256, NodeDataHasher));
+    const stateId = await StateId.fromTransaction(expired);
+    await smt.addLeaf(
+      stateId.data,
+      (await calculateLeafValue(expiredCertificationData.transactionHash, REFERENCE_TIME)).data,
+    );
+    const root = await smt.calculateRoot();
 
     await expect(
       InclusionProofVerificationRule.verify(
         trustBase,
         predicateVerifier,
         unicityCertificateVerifier,
-        inclusionProof,
-        await transaction.calculateTransactionHash(),
-        transaction.expiresAt,
-        transaction.expiresAt!,
-        transaction.lockScript,
-        transaction.sourceStateHash,
+        new InclusionProof(
+          expiredCertificationData,
+          REFERENCE_TIME,
+          InclusionCertificate.create(root, stateId.data),
+          await createUnicityCertificate(root.hash, signingService),
+        ),
+        await expired.calculateTransactionHash(),
+        expired.expiresAt,
+        expired.lockScript,
+        expired.sourceStateHash,
       ).then((result) => result.status),
     ).resolves.toEqual(InclusionProofVerificationStatus.REQUEST_EXPIRED);
   });
@@ -262,7 +304,6 @@ describe('InclusionProof', () => {
         inclusionProof,
         await transaction.calculateTransactionHash(),
         transaction.expiresAt,
-        REFERENCE_TIME,
         transaction.lockScript,
         transaction.sourceStateHash,
       ).then((result) => result.status),

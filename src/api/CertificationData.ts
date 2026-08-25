@@ -47,6 +47,13 @@ export class CertificationData {
   }
 
   /**
+   * @returns {bigint} Wire-format version of this certification data.
+   */
+  public get version(): bigint {
+    return CertificationData.VERSION;
+  }
+
+  /**
    * Create CertificationData from CBOR bytes.
    * @param {Uint8Array} bytes CBOR bytes
    *

@@ -1,4 +1,5 @@
 import { CertifiedMintTransaction } from './CertifiedMintTransaction.js';
+import { validateExpiresAt } from './ExpiresAt.js';
 import { IMintOptions } from './IMintOptions.js';
 import { ITransaction } from './ITransaction.js';
 import { MintTransactionState } from './MintTransactionState.js';
@@ -70,6 +71,13 @@ export class MintTransaction implements ITransaction {
   }
 
   /**
+   * @returns {bigint} Wire-format version of this mint transaction.
+   */
+  public get version(): bigint {
+    return MintTransaction.VERSION;
+  }
+
+  /**
    * Create a MintTransaction for a fresh token.
    *
    * @param {NetworkId} networkId Network identifier.
@@ -82,7 +90,8 @@ export class MintTransaction implements ITransaction {
     recipient: IPredicate,
     options: IMintOptions = {},
   ): Promise<MintTransaction> {
-    const { tokenType = TokenType.generate(), salt = TokenSalt.generate(), expiresAt = null } = options;
+    const { tokenType = TokenType.generate(), salt = TokenSalt.generate() } = options;
+    const expiresAt = validateExpiresAt(options.expiresAt ?? null);
     const justification = options.justification ? new Uint8Array(options.justification) : null;
     const data = options.data ? new Uint8Array(options.data) : null;
 

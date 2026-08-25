@@ -115,11 +115,27 @@ Run the example flows (requires a reachable aggregator; URL is read from each ex
 npm run test:examples
 ```
 
-Run the end-to-end suite (defaults to a local aggregator at `http://localhost:3000`):
+Run the end-to-end suite. It talks to a real aggregator — the wire formats it
+covers (certification data, the transaction encodings, the inclusion proof and
+the reference-time-bound leaf value) are shared with the service, so nothing but
+a real service can tell whether the two still agree.
+
+Bring a local one up first. `scripts/e2e-aggregator.sh` starts the stack in
+[`tests/e2e/docker`](./tests/e2e/docker) — a BFT root node, mongodb, redis and a
+pinned aggregator build — and waits until consensus is certifying rounds:
 
 ```bash
+npm run e2e:up
+eval "$(./scripts/e2e-aggregator.sh env)"   # AGGREGATOR_URL + the generated TRUST_BASE_PATH
 npm run test:e2e
+npm run e2e:down
 ```
+
+The e2e suite is not part of CI — it needs a live aggregator — so run it locally
+before changing anything on the wire. `e2e:down` also deletes the generated
+genesis, so the next `e2e:up` starts from a clean chain. Without `AGGREGATOR_URL` and `TRUST_BASE_PATH` the suite falls
+back to `http://localhost:3000` and the checked-in trust base, which only match
+an aggregator someone else started.
 
 To run it against another network, point it at that endpoint and supply the matching trust base:
 

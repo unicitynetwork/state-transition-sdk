@@ -17,10 +17,11 @@ import { VerificationStatus } from '../../../verification/VerificationStatus.js'
 export enum InclusionProofVerificationStatus {
   INVALID_TRUSTBASE = 'INVALID_TRUSTBASE',
   MISSING_CERTIFICATION_DATA = 'MISSING_CERTIFICATION_DATA',
+  INCOMPLETE_INCLUSION_PROOF = 'INCOMPLETE_INCLUSION_PROOF',
   CERTIFICATION_DATA_MISMATCH = 'CERTIFICATION_DATA_MISMATCH',
   TRANSACTION_HASH_MISMATCH = 'TRANSACTION_HASH_MISMATCH',
   MISSING_REFERENCE_TIME = 'MISSING_REFERENCE_TIME',
-  REFERENCE_TIME_MISMATCH = 'REFERENCE_TIME_MISMATCH',
+  REFERENCE_TIME_AFTER_ROUND = 'REFERENCE_TIME_AFTER_ROUND',
   REQUEST_EXPIRED = 'REQUEST_EXPIRED',
   NOT_AUTHENTICATED = 'NOT_AUTHENTICATED',
   INCLUSION_CERTIFICATE_MISSING = 'INCLUSION_CERTIFICATE_MISSING',
@@ -43,7 +44,6 @@ export class InclusionProofVerificationRule {
    * @param {InclusionProof} inclusionProof Inclusion proof to verify.
    * @param {DataHash} transactionHash Canonical hash of the transaction.
    * @param {bigint|null} expiresAt Exclusive request deadline, or `null` when the service assigned one.
-   * @param {bigint} referenceTime Reference time the transition was validated under.
    * @param {EncodedPredicate} lockScript Lock script the transaction unlocks.
    * @param {DataHash} sourceStateHash Hash of the state the transaction spends.
    * @returns {Promise<VerificationResult<InclusionProofVerificationStatus>>} Verification outcome.
@@ -55,22 +55,49 @@ export class InclusionProofVerificationRule {
     inclusionProof: InclusionProof,
     transactionHash: DataHash,
     expiresAt: bigint | null,
-    referenceTime: bigint,
     lockScript: EncodedPredicate,
     sourceStateHash: DataHash,
   ): Promise<VerificationResult<InclusionProofVerificationStatus>> {
-    if (!inclusionProof.inclusionCertificate) {
+    const certificationData = inclusionProof.certificationData;
+    // The reference time comes from the proof, which is the only party that can
+    // state it; the leaf value binds this exact value, so the SMT path below
+    // authenticates it.
+    const referenceTime = inclusionProof.referenceTime;
+    const inclusionCertificate = inclusionProof.inclusionCertificate;
+
+    // A proof reporting no leaf at all is the aggregator's "not certified yet",
+    // and the only status {@link waitInclusionProof} polls through.
+    if (certificationData == null && referenceTime == null && inclusionCertificate == null) {
       return new VerificationResult(
         'InclusionProofVerificationRule',
         InclusionProofVerificationStatus.INCLUSION_CERTIFICATE_MISSING,
       );
     }
 
-    const certificationData = inclusionProof.certificationData;
-    if (!certificationData) {
+    // Anything in between establishes neither a leaf nor its absence.
+    // {@link InclusionProof.fromCBOR} rejects such a proof outright, so this is
+    // reachable only from one built by hand — a non-conforming service behind a
+    // custom client, or a stripping proxy. Each case reports what is missing:
+    // folding them into the pending status would leave the caller polling to
+    // its own deadline and blame the timeout.
+    if (certificationData == null) {
       return new VerificationResult(
         'InclusionProofVerificationRule',
         InclusionProofVerificationStatus.MISSING_CERTIFICATION_DATA,
+      );
+    }
+
+    if (referenceTime == null) {
+      return new VerificationResult(
+        'InclusionProofVerificationRule',
+        InclusionProofVerificationStatus.MISSING_REFERENCE_TIME,
+      );
+    }
+
+    if (inclusionCertificate == null) {
+      return new VerificationResult(
+        'InclusionProofVerificationRule',
+        InclusionProofVerificationStatus.INCOMPLETE_INCLUSION_PROOF,
       );
     }
 
@@ -99,20 +126,24 @@ export class InclusionProofVerificationRule {
       return new VerificationResult('InclusionProofVerificationRule', InclusionProofVerificationStatus.REQUEST_EXPIRED);
     }
 
-    const stateId = await StateId.fromCertificationData(certificationData);
-    // The leaf value binds the reference time the transition was validated
-    // under. It is taken from the caller, not from the proof's own unicity
-    // certificate: the tree is append-only, so the proof may have been issued
-    // against a later root whose input record carries a later reference time.
-    // A null reference time on the proof also fails this comparison.
-    if (inclusionProof.referenceTime !== referenceTime) {
+    // The service alone picks the leaf's reference time, and the SMT path proves
+    // only that it committed to whatever it picked — on its own that lets a
+    // service back-date a leaf and admit a request its deadline should have
+    // killed. Consensus signs the round's own timestamp, which is that round's
+    // reference time, and a leaf cannot predate the round that certifies it, so
+    // this is a signed upper bound available for free. The tree is append-only,
+    // so a proof re-fetched later is certified by a later round and the bound
+    // only loosens.
+    if (referenceTime > inclusionProof.unicityCertificate.inputRecord.timestamp) {
       return new VerificationResult(
         'InclusionProofVerificationRule',
-        InclusionProofVerificationStatus.REFERENCE_TIME_MISMATCH,
+        InclusionProofVerificationStatus.REFERENCE_TIME_AFTER_ROUND,
       );
     }
+
+    const stateId = await StateId.fromCertificationData(certificationData);
     const leafValue = await calculateLeafValue(certificationData.transactionHash, referenceTime);
-    const result = await inclusionProof.inclusionCertificate.verify(
+    const result = await inclusionCertificate.verify(
       stateId,
       leafValue,
       new DataHash(HashAlgorithm.SHA256, inclusionProof.unicityCertificate.inputRecord.hash),

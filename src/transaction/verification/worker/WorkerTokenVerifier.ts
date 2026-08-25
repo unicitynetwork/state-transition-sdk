@@ -1,3 +1,4 @@
+import { TransferTransaction } from '../../TransferTransaction.js';
 import { ITokenVerifier } from '../ITokenVerifier.js';
 import { IVerificationContext } from '../IVerificationContext.js';
 import { IWorker } from './IWorker.js';
@@ -140,7 +141,6 @@ class WorkerTransferTransaction {
     public readonly sourceStateHash: DataHash,
     public readonly lockScript: EncodedPredicate,
     public readonly expiresAt: bigint | null,
-    public readonly referenceTime: bigint,
     public readonly inclusionProof: InclusionProof,
   ) {}
 
@@ -151,22 +151,18 @@ class WorkerTransferTransaction {
    * @returns {WorkerTransferTransaction} Decoded transfer.
    */
   public static fromCBOR(bytes: Uint8Array): WorkerTransferTransaction {
-    const data = CborDeserializer.decodeArray(bytes, 4);
-    const certified = CborDeserializer.decodeArray(data[0], 3);
-    const proof = InclusionProof.fromCBOR(certified[2]);
-    const referenceTime = CborDeserializer.decodeUnsignedInteger(certified[1]);
-    // A null reference time on the proof also fails this comparison.
-    if (proof.referenceTime !== referenceTime) {
-      throw new Error('Certified transfer transaction reference time does not match its inclusion proof.');
-    }
+    const data = CborDeserializer.decodeArray(bytes, 3);
+    const certified = CborDeserializer.decodeArray(data[0], 2);
 
     return new WorkerTransferTransaction(
       certified[0],
       DataHash.fromImprint(CborDeserializer.decodeByteString(data[1])),
       EncodedPredicate.fromCBOR(data[2]),
-      CborDeserializer.decodeNullable(data[3], CborDeserializer.decodeUnsignedInteger),
-      referenceTime,
-      proof,
+      // Recovered from the transfer bytes the transaction hash commits to, not
+      // carried alongside them: a copy outside those bytes is unauthenticated,
+      // and nothing downstream could tell the two apart if they disagreed.
+      TransferTransaction.expiresAtFromCBOR(certified[0]),
+      InclusionProof.fromCBOR(certified[1]),
     );
   }
 
@@ -182,7 +178,6 @@ class WorkerTransferTransaction {
       transaction.toCBOR(),
       CborSerializer.encodeByteString(transaction.sourceStateHash.imprint),
       transaction.lockScript.toCBOR(),
-      CborSerializer.encodeNullable(transaction.expiresAt, CborSerializer.encodeUnsignedInteger),
     );
   }
 
@@ -216,7 +211,6 @@ class WorkerTransferTransaction {
       this.inclusionProof,
       await this.calculateTransactionHash(),
       this.expiresAt,
-      this.referenceTime,
       this.lockScript,
       this.sourceStateHash,
     );

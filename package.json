@@ -10,6 +10,8 @@
   "scripts": {
     "build": "tsc --project tsconfig.build.json",
     "build:check": "tsc --noEmit",
+    "e2e:up": "./scripts/e2e-aggregator.sh up",
+    "e2e:down": "./scripts/e2e-aggregator.sh down",
     "lint": "eslint \"src/**/*\" \"tests/**/*\"",
     "lint:fix": "eslint \"src/**/*\" \"tests/**/*\" --fix",
     "test": "npm run-script test:unit",

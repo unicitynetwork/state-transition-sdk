@@ -27,7 +27,6 @@ export class CertifiedTransferTransactionVerificationRule {
       transaction.inclusionProof,
       await transaction.calculateTransactionHash(),
       transaction.expiresAt,
-      transaction.referenceTime,
       transaction.lockScript,
       transaction.sourceStateHash,
     );
