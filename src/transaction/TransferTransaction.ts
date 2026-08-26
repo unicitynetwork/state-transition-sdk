@@ -1,4 +1,5 @@
 import { CertifiedTransferTransaction } from './CertifiedTransferTransaction.js';
+import { validateExpiresAt } from './ExpiresAt.js';
 import { ITransaction } from './ITransaction.js';
 import { ITransferOptions } from './ITransferOptions.js';
 import { StateMask } from './StateMask.js';
@@ -51,6 +52,13 @@ export class TransferTransaction implements ITransaction {
   }
 
   /**
+   * @returns {bigint} Wire-format version of this transfer transaction.
+   */
+  public get version(): bigint {
+    return TransferTransaction.VERSION;
+  }
+
+  /**
    * Create a TransferTransaction for the given token.
    *
    * @param {Token} token Token being transferred (last transaction is used as the source).
@@ -65,7 +73,7 @@ export class TransferTransaction implements ITransaction {
     stateMask: StateMask,
     options: ITransferOptions = {},
   ): Promise<TransferTransaction> {
-    const { expiresAt = null } = options;
+    const expiresAt = validateExpiresAt(options.expiresAt ?? null);
     const data = options.data ? new Uint8Array(options.data) : null;
 
     const transaction = token.latestTransaction;
@@ -77,6 +85,35 @@ export class TransferTransaction implements ITransaction {
       stateMask,
       data,
     );
+  }
+
+  /**
+   * Read the request deadline out of encoded transfer bytes.
+   *
+   * A full decode needs the token the transfer belongs to, for the source state
+   * and lock script it derives from the chain. A consumer that holds only the
+   * transfer bytes — the worker wire format below is the one in this SDK — can
+   * still recover the deadline from them, and must, because these are the bytes
+   * the transaction hash commits to. Being told the deadline out of band
+   * instead leaves the value unauthenticated.
+   *
+   * @param {Uint8Array} bytes Encoded transfer transaction.
+   * @returns {bigint|null} Exclusive request deadline in Unix seconds, or `null` when the service assigned one.
+   * @throws {CborError} On wrong tag or unsupported version.
+   */
+  public static expiresAtFromCBOR(bytes: Uint8Array): bigint | null {
+    const tag = CborDeserializer.decodeTag(bytes);
+    if (tag.tag !== TransferTransaction.CBOR_TAG) {
+      throw new CborError(`Invalid CBOR tag for TransferTransaction: ${tag.tag}`);
+    }
+
+    const data = CborDeserializer.decodeArray(tag.data, TransferTransaction.FIELD_COUNT);
+    const version = CborDeserializer.decodeUnsignedInteger(data[0]);
+    if (version !== TransferTransaction.VERSION) {
+      throw new CborError(`Unsupported TransferTransaction version: ${version}`);
+    }
+
+    return CborDeserializer.decodeNullable(data[4], CborDeserializer.decodeUnsignedInteger);
   }
 
   /**

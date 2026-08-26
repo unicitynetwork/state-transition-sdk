@@ -178,14 +178,6 @@ export async function waitInclusionProof(
 
   const poll = async (requestSignal: AbortSignal): Promise<InclusionProof | null> => {
     const { inclusionProof } = await client.getInclusionProof(stateId, { signal: requestSignal });
-    if (inclusionProof.certificationData == null || inclusionProof.inclusionCertificate == null) {
-      return null;
-    }
-
-    const referenceTime = inclusionProof.referenceTime;
-    if (referenceTime == null) {
-      throw new Error('Inclusion proof is missing its leaf creation reference time.');
-    }
 
     const verificationStatus = await InclusionProofVerificationRule.verify(
       trustBase,
@@ -194,7 +186,6 @@ export async function waitInclusionProof(
       inclusionProof,
       transactionHash,
       transaction.expiresAt,
-      referenceTime,
       transaction.lockScript,
       transaction.sourceStateHash,
     );
@@ -202,6 +193,11 @@ export async function waitInclusionProof(
     switch (verificationStatus.status) {
       case InclusionProofVerificationStatus.OK:
         return inclusionProof;
+      // The one status that means "not certified yet", and the only one worth
+      // polling through. A proof that is present but structurally impossible —
+      // certification data without a certificate, a leaf without its creation
+      // time — is a non-conforming service or a stripping proxy, and reporting
+      // it as pending would hide the cause behind the caller's own timeout.
       case InclusionProofVerificationStatus.INCLUSION_CERTIFICATE_MISSING:
         return null;
       default:

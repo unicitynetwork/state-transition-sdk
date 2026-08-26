@@ -168,6 +168,24 @@ The inclusion proof works through a Merkle-like authenticated data structure wit
 
 The combination of these elements creates a robust system where token states can be provably spent once and only once, without revealing token details to the broader network or requiring individual blockchain transactions for each token transfer.
 
+### 2.7 Request Deadlines
+
+A commitment submitted to the Unicity Aggregator carries a deadline: the point beyond which the sender no longer wants it committed. The aggregator groups commitments into rounds, and each round is pinned to a single reference time drawn from consensus. A commitment is admitted to a round only when that round's reference time is strictly below the deadline — the deadline is exclusive, so a round whose reference time has reached it is already too late.
+
+Both the deadline and a round's reference time are **wall-clock instants in Unix seconds**, not round numbers or block heights. The reference time is the timestamp of the consensus seal that certified the preceding round, so it is the root chain's clock rather than any participant's. A sender that derives a deadline from its own clock is therefore comparing against a clock it does not control, and the two can differ by seconds; deadlines are meant to be set with enough margin to absorb that, and a sender with no trustworthy clock omits the deadline entirely (below).
+
+The deadline exists because submission and commitment are separated in time. A commitment that sits in the queue while conditions change — a price moves, an offer lapses, a counterparty withdraws — should expire rather than execute late. Without a deadline, a sender has no way to bound how long a submitted commitment stays live.
+
+A sender may supply the deadline explicitly, or leave it to the service:
+
+- **Explicit.** The deadline is part of what the commitment's transaction hash commits to, so it is carried in the token and re-checked by every later verifier against the reference time the commitment was validated under. A verifier reaching a commitment whose recorded reference time is at or past its deadline rejects it.
+
+- **Service-assigned.** A sender with no trustworthy clock omits the deadline, and the service derives one from consensus time plus its own configured request lifetime. That value is service metadata: it governs admission, but it is not recorded in the commitment, does not alter the transaction hash, and is not re-checked by a later verifier.
+
+The reference time a commitment was validated under is a property of the commitment, not of any particular proof of it. The authenticated data structure is append-only, so a commitment can be proven against any later root, and a proof obtained later is anchored to a later round. The reference time recorded with the commitment does not move with it.
+
+**What a deadline does and does not guarantee.** Admission is enforced by the aggregator at the moment it accepts the commitment. A later verifier can confirm that the recorded reference time is consistent with the commitment and precedes its deadline, but cannot establish when the commitment was actually created — the reference time is chosen by the aggregator, and the inclusion proof authenticates the value it chose rather than the moment it chose it. An aggregator that accepted a commitment after its deadline and recorded an earlier reference time would produce a proof that verifies. A deadline is therefore an instruction to an honest service, and the guarantee that a late commitment is dropped rather than executed rests on the same consensus that secures the aggregator, not on the deadline field alone.
+
 ## 3. State Transition Process
 
 ### 3.1 Transaction and Transition Structures

@@ -8,7 +8,72 @@ on:
     types: [published]
 
 jobs:
+  # Keeps its bare `build` name: that is the check name this repo's history and
+  # any future branch protection would refer to.
   build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.x'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Type check (src + tests)
+        run: npm run build:check
+
+      - name: Lint code
+        run: npm run lint
+
+      - name: Run tests
+        run: npm run test:ci
+
+  integration:
+    name: Integration against a real aggregator
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.x'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Testcontainers starts the stack in tests/integration/docker — a BFT root
+      # node, mongodb, redis and a pinned aggregator build — waits for consensus
+      # to certify a round, and tears it down afterwards. Nothing external is
+      # involved, and the aggregator is published on an ephemeral port, so
+      # concurrent jobs on a runner cannot collide.
+      - name: Run integration tests
+        run: npm run test:integration
+
+  # Publishing is its own job so that it can depend on both of the above.
+  # Sibling jobs run independently, so while these steps lived in `build` a
+  # green unit run could publish a package the integration suite had already
+  # found incompatible with a real aggregator — and an npm release cannot be
+  # taken back. `needs` is the gate; the conditions below only choose which
+  # kind of release this is.
+  publish:
+    name: Publish to npm
+    needs: [build, integration]
+    if: github.event_name == 'release' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -32,17 +97,7 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Type check (src + tests)
-        run: npm run build:check
-
-      - name: Lint code
-        run: npm run lint
-
-      - name: Run tests
-        run: npm run test:ci
-
-      # Only build and publish on push to main and release events
-      - name: Build and publish (main branch only)
+      - name: Publish dev build (main branch only)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           NPM_PACKAGE_VERSION=$(node -e "const fs = require('fs'); console.log(JSON.parse(fs.readFileSync('package.json')).version);")

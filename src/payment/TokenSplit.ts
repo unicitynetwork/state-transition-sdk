@@ -1,3 +1,4 @@
+import { validateExpiresAt } from '../transaction/ExpiresAt.js';
 import { DuplicateSplitTokenIdError } from './error/DuplicateSplitTokenIdError.js';
 import { TokenAssetCountMismatchError } from './error/TokenAssetCountMismatchError.js';
 import { TokenAssetMissingError } from './error/TokenAssetMissingError.js';
@@ -55,7 +56,8 @@ export class TokenSplit {
     requests: SplitTokenRequest[],
     options: ISplitOptions = {},
   ): Promise<ISplit> {
-    const { burnStateMask = StateMask.generate(), expiresAt = null } = options;
+    const { burnStateMask = StateMask.generate() } = options;
+    const expiresAt = validateExpiresAt(options.expiresAt ?? null);
     const factory = new DataHasherFactory(HashAlgorithm.SHA256, DataHasher);
 
     if (token.genesis.data == null) {

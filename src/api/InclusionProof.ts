@@ -23,7 +23,7 @@ export class InclusionProof {
    * decoded proofs always satisfy that invariant.
    *
    * @param certificationData Certification data.
-   * @param referenceTime Reference time of the round the leaf was created in.
+   * @param referenceTime Reference time of the round the leaf was created in, in Unix seconds.
    * @param inclusionCertificate Inclusion certificate.
    * @param unicityCertificate Unicity certificate.
    */

@@ -31,6 +31,11 @@ export class TestAggregatorClient implements IAggregatorClient {
    * is against a live aggregator.
    */
   private referenceTime: bigint = BigInt(Math.floor(Date.now() / 1000));
+  /**
+   * Lifetime the service grants a request that omits its own deadline, matching
+   * the aggregator's one-hour DEFAULT_REQUEST_TTL fallback.
+   */
+  private requestTtl: bigint = 3600n;
   private readonly requests: Map<bigint, { certificationData: CertificationData; referenceTime: bigint }> = new Map();
 
   private constructor(
@@ -80,6 +85,28 @@ export class TestAggregatorClient implements IAggregatorClient {
   }
 
   /**
+   * Drive the round clock the fake certifies under.
+   *
+   * Zero is how the service reports that it has no consensus reference time
+   * yet: it certifies nothing until consensus hands it one.
+   *
+   * @param {bigint} referenceTime Reference time a round starting now would pin.
+   */
+  public setReferenceTime(referenceTime: bigint): void {
+    this.referenceTime = referenceTime;
+  }
+
+  /**
+   * Shorten the lifetime granted to a request that carries no deadline of its
+   * own, so a test can watch a service-assigned deadline lapse.
+   *
+   * @param {bigint} requestTtl Lifetime in seconds.
+   */
+  public setRequestTtl(requestTtl: bigint): void {
+    this.requestTtl = requestTtl;
+  }
+
+  /**
    * @inheritDoc
    */
   public async submitCertificationRequest(certificationData: CertificationData): Promise<CertificationResponse> {
@@ -97,7 +124,19 @@ export class TestAggregatorClient implements IAggregatorClient {
       return CertificationResponse.create(CertificationStatus.SIGNATURE_VERIFICATION_FAILED);
     }
 
-    if (certificationData.expiresAt != null && this.referenceTime >= certificationData.expiresAt) {
+    // Nothing can be certified before consensus has handed the service a
+    // reference time to pin rounds to.
+    if (this.referenceTime === 0n) {
+      return CertificationResponse.create(CertificationStatus.SERVICE_NOT_READY);
+    }
+
+    // An explicit deadline is used verbatim and is covered by the witness. A
+    // request without one is admitted under a deadline the service derives from
+    // consensus time; that value is service metadata, never recorded in the
+    // leaf and never re-checked by a later verifier. Either way the deadline is
+    // exclusive.
+    const effectiveTimeout = certificationData.expiresAt ?? this.referenceTime + this.requestTtl;
+    if (this.referenceTime >= effectiveTimeout) {
       return CertificationResponse.create(CertificationStatus.REQUEST_EXPIRED);
     }
 

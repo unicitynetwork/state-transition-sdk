@@ -63,7 +63,6 @@ export class CertifiedMintTransactionVerificationRule {
       genesis.inclusionProof,
       await genesis.calculateTransactionHash(),
       genesis.expiresAt,
-      genesis.referenceTime,
       genesis.lockScript,
       genesis.sourceStateHash,
     );

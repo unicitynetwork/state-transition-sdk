@@ -66,6 +66,7 @@ export async function transferToken(
   tokenBytes: Uint8Array,
   recipient: IPredicate,
   signingService: SigningService,
+  expiresAt: bigint | null = null,
 ): Promise<Token> {
   const token = await Token.fromCBOR(tokenBytes);
   const result = await token.verify(verificationContext);
@@ -74,7 +75,7 @@ export async function transferToken(
     throw new Error(`Token verification failed: ${result.status}`);
   }
 
-  const transaction = await TransferTransaction.create(token, recipient, StateMask.generate());
+  const transaction = await TransferTransaction.create(token, recipient, StateMask.generate(), { expiresAt });
 
   return transferTokenWithTransaction(
     client,

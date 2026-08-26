@@ -13,7 +13,6 @@ import { CborError } from '../serialization/cbor/CborError.js';
 import { CborSerializer } from '../serialization/cbor/CborSerializer.js';
 import { dedent } from '../util/StringUtils.js';
 import { VerificationError } from '../verification/VerificationError.js';
-import { VerificationResult } from '../verification/VerificationResult.js';
 import {
   InclusionProofVerificationRule,
   InclusionProofVerificationStatus,
@@ -25,7 +24,6 @@ import {
 export class CertifiedTransferTransaction implements ITransaction {
   private constructor(
     private readonly transaction: TransferTransaction,
-    public readonly referenceTime: bigint,
     public readonly inclusionProof: InclusionProof,
   ) {}
 
@@ -37,7 +35,7 @@ export class CertifiedTransferTransaction implements ITransaction {
   }
 
   /**
-   * @returns {bigint|null} Exclusive request deadline of the inner transaction.
+   * @returns {bigint|null} Exclusive request deadline of the inner transaction, in Unix seconds.
    */
   public get expiresAt(): bigint | null {
     return this.transaction.expiresAt;
@@ -55,6 +53,19 @@ export class CertifiedTransferTransaction implements ITransaction {
    */
   public get recipient(): EncodedPredicate {
     return this.transaction.recipient;
+  }
+
+  /**
+   * @returns {bigint} Reference time of the round the leaf was created in, in Unix seconds.
+   *
+   * Read from the inclusion proof rather than stored beside it: the service
+   * records the leaf's creation time on the record itself and serves that same
+   * value for every proof of the leaf, and the leaf value binds it, so the
+   * proof is the authenticated source for it.
+   */
+  public get referenceTime(): bigint {
+    // Non-null by construction: every factory below rejects a proof without one.
+    return this.inclusionProof.referenceTime as bigint;
   }
 
   /**
@@ -79,14 +90,15 @@ export class CertifiedTransferTransaction implements ITransaction {
    * @returns {Promise<CertifiedTransferTransaction>} Decoded certified transaction.
    */
   public static async fromCBOR(bytes: Uint8Array, token: Token): Promise<CertifiedTransferTransaction> {
-    const data = CborDeserializer.decodeArray(bytes, 3);
-    const referenceTime = CborDeserializer.decodeUnsignedInteger(data[1]);
-    const proof = InclusionProof.fromCBOR(data[2]);
-    // A null reference time on the proof also fails this comparison.
-    if (referenceTime !== proof.referenceTime) {
-      throw new CborError('Certified transfer transaction reference time does not match its inclusion proof.');
+    const data = CborDeserializer.decodeArray(bytes, 2);
+    const proof = InclusionProof.fromCBOR(data[1]);
+    // A certified transaction is one bound to a leaf. A proof that reports no
+    // leaf cannot certify anything, and decoding it into one would hand every
+    // later verifier a transaction with no reference time.
+    if (proof.referenceTime == null) {
+      throw new CborError('Certified transfer transaction carries an inclusion proof with no certified leaf.');
     }
-    return new CertifiedTransferTransaction(await TransferTransaction.fromCBOR(data[0], token), referenceTime, proof);
+    return new CertifiedTransferTransaction(await TransferTransaction.fromCBOR(data[0], token), proof);
   }
 
   /**
@@ -107,21 +119,6 @@ export class CertifiedTransferTransaction implements ITransaction {
     transaction: TransferTransaction,
     inclusionProof: InclusionProof,
   ): Promise<CertifiedTransferTransaction> {
-    // The reference time is fixed here, at the moment the transaction is bound
-    // to its first proof. Later verifiers use the carried value: a proof
-    // fetched later may be issued against a later root and would then carry a
-    // different input record time.
-    const referenceTime = inclusionProof.referenceTime;
-    if (referenceTime == null) {
-      throw new VerificationError(
-        'Inclusion proof verification failed',
-        new VerificationResult(
-          'InclusionProofVerificationRule',
-          InclusionProofVerificationStatus.MISSING_REFERENCE_TIME,
-        ),
-      );
-    }
-
     const result = await InclusionProofVerificationRule.verify(
       trustBase,
       predicateVerifier,
@@ -129,7 +126,6 @@ export class CertifiedTransferTransaction implements ITransaction {
       inclusionProof,
       await transaction.calculateTransactionHash(),
       transaction.expiresAt,
-      referenceTime,
       transaction.lockScript,
       transaction.sourceStateHash,
     );
@@ -137,7 +133,7 @@ export class CertifiedTransferTransaction implements ITransaction {
       throw new VerificationError('Inclusion proof verification failed', result);
     }
 
-    return new CertifiedTransferTransaction(transaction, referenceTime, inclusionProof);
+    return new CertifiedTransferTransaction(transaction, inclusionProof);
   }
 
   /**
@@ -158,11 +154,7 @@ export class CertifiedTransferTransaction implements ITransaction {
    * @inheritDoc
    */
   public toCBOR(): Uint8Array {
-    return CborSerializer.encodeArray(
-      this.transaction.toCBOR(),
-      CborSerializer.encodeUnsignedInteger(this.referenceTime),
-      this.inclusionProof.toCBOR(),
-    );
+    return CborSerializer.encodeArray(this.transaction.toCBOR(), this.inclusionProof.toCBOR());
   }
 
   /**

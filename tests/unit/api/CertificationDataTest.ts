@@ -2,6 +2,7 @@ import { CertificationData } from '../../../src/api/CertificationData.js';
 import { NetworkId } from '../../../src/api/NetworkId.js';
 import { SignaturePredicate } from '../../../src/predicate/builtin/SignaturePredicate.js';
 import { EncodedPredicate } from '../../../src/predicate/EncodedPredicate.js';
+import { CborDeserializer } from '../../../src/serialization/cbor/CborDeserializer.js';
 import { MintTransaction } from '../../../src/transaction/MintTransaction.js';
 import { TokenSalt } from '../../../src/transaction/TokenSalt.js';
 import { TokenType } from '../../../src/transaction/TokenType.js';
@@ -65,7 +66,12 @@ describe('CertificationData', () => {
     const encoded = withoutDeadline.toCBOR();
     expect(encoded[3]).toBe(withDeadline.toCBOR()[3]);
     expect(encoded[4]).toBe(2);
-    expect(HexConverter.encode(encoded)).toContain('f6');
+    // The deadline's own element, decoded rather than searched for: 'f6'
+    // appears somewhere in a hash-and-signature payload of this length with
+    // probability indistinguishable from one, so searching the hex asserts
+    // nothing about how the absent deadline was encoded.
+    const elements = CborDeserializer.decodeArray(CborDeserializer.decodeTag(encoded).data, 6);
+    expect(HexConverter.encode(elements[4])).toBe('f6');
 
     const decoded = CertificationData.fromCBOR(encoded);
     expect(decoded.expiresAt).toBeNull();
