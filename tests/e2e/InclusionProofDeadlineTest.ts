@@ -13,6 +13,7 @@ import { MintTransaction } from '../../src/transaction/MintTransaction.js';
 import { TokenSalt } from '../../src/transaction/TokenSalt.js';
 import { TokenType } from '../../src/transaction/TokenType.js';
 import { waitInclusionProof } from '../../src/util/InclusionProofUtils.js';
+import { expiresAt } from '../utils/ExpiresAt.js';
 import { createUnicityCertificateVerifier } from '../utils/UnicityCertificateVerifierFixture.js';
 
 /** How long a wait may run past its own deadline before it counts as unbounded. */
@@ -60,10 +61,11 @@ describe('E2E waitInclusionProof deadline', () => {
     transaction = await MintTransaction.create(
       trustBase.networkId,
       SignaturePredicate.create(SigningService.generate().publicKey),
-      null,
-      TokenType.generate(),
-      TokenSalt.generate(),
-      null,
+      {
+        expiresAt: expiresAt(),
+        salt: TokenSalt.generate(),
+        tokenType: TokenType.generate(),
+      },
     );
   });
 

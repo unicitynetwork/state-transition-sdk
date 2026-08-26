@@ -10,6 +10,13 @@ import { EncodedPredicate } from '../predicate/EncodedPredicate.js';
 export interface ITransaction {
   readonly data: Uint8Array | null;
 
+  /**
+   * Exclusive request deadline in Unix seconds, or `null` when the service
+   * assigns one from consensus time. It occupies a fixed position in the
+   * encoding and is committed by the transaction hash either way.
+   */
+  readonly expiresAt: bigint | null;
+
   readonly lockScript: EncodedPredicate;
 
   readonly recipient: EncodedPredicate;

@@ -26,15 +26,15 @@ export async function mintToken(
   tokenType: TokenType = TokenType.generate(),
   salt: TokenSalt = TokenSalt.generate(),
   justification: ICborSerializable | null = null,
+  expiresAt: bigint | null = null,
 ): Promise<Token> {
-  const transaction = await MintTransaction.create(
-    networkId,
-    recipient,
-    data,
-    tokenType,
-    salt,
-    justification?.toCBOR(),
-  );
+  const transaction = await MintTransaction.create(networkId, recipient, {
+    data: data,
+    expiresAt: expiresAt,
+    justification: justification?.toCBOR(),
+    salt: salt,
+    tokenType: tokenType,
+  });
 
   const certificationData = await CertificationData.fromMintTransaction(transaction);
 
@@ -66,6 +66,7 @@ export async function transferToken(
   tokenBytes: Uint8Array,
   recipient: IPredicate,
   signingService: SigningService,
+  expiresAt: bigint | null = null,
 ): Promise<Token> {
   const token = await Token.fromCBOR(tokenBytes);
   const result = await token.verify(verificationContext);
@@ -74,7 +75,7 @@ export async function transferToken(
     throw new Error(`Token verification failed: ${result.status}`);
   }
 
-  const transaction = await TransferTransaction.create(token, recipient, StateMask.generate());
+  const transaction = await TransferTransaction.create(token, recipient, StateMask.generate(), { expiresAt });
 
   return transferTokenWithTransaction(
     client,

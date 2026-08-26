@@ -19,6 +19,7 @@ export interface IPredicateVerifier {
    */
   verify(
     encodedPredicate: IPredicate,
+    referenceTime: bigint,
     sourceStateHash: DataHash,
     transactionHash: DataHash,
     unlockScript: Uint8Array,

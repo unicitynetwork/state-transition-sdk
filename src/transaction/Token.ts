@@ -20,7 +20,13 @@ import { CertifiedTransferTransactionVerificationRule } from './verification/rul
  */
 export class Token {
   public static readonly CBOR_TAG = 39040n;
-  private static readonly VERSION = 1n;
+  /**
+   * The only accepted wire version. Bumped with the certified-transaction
+   * element counts and the transaction encodings below them: without it a token
+   * written by an older SDK passes the version check here and then dies deeper
+   * down on a CBOR array-length error that never mentions versioning.
+   */
+  private static readonly VERSION = 2n;
 
   private constructor(
     public readonly genesis: CertifiedMintTransaction,

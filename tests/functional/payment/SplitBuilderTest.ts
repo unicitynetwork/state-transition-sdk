@@ -26,6 +26,7 @@ import { VerificationContext } from '../../../src/transaction/verification/Verif
 import { HexConverter } from '../../../src/util/HexConverter.js';
 import { waitInclusionProof } from '../../../src/util/InclusionProofUtils.js';
 import { VerificationStatus } from '../../../src/verification/VerificationStatus.js';
+import { expiresAt } from '../../utils/ExpiresAt.js';
 import { createUnicityCertificateVerifier } from '../../utils/UnicityCertificateVerifierFixture.js';
 import { TestAggregatorClient } from '../TestAggregatorClient.js';
 
@@ -56,7 +57,10 @@ describe('SplitBuilder Functional Test', () => {
 
     const paymentData = new TestPaymentData(PaymentAssetCollection.create(...assets));
     const networkId = NetworkId.LOCAL;
-    const mintTransaction = await MintTransaction.create(networkId, predicate, await paymentData.encode());
+    const mintTransaction = await MintTransaction.create(networkId, predicate, {
+      data: await paymentData.encode(),
+      expiresAt: expiresAt(),
+    });
     let certificationData = await CertificationData.fromMintTransaction(mintTransaction);
 
     let response = await client.submitCertificationRequest(certificationData);
@@ -72,40 +76,65 @@ describe('SplitBuilder Functional Test', () => {
       verificationContext,
     );
 
+    // The burn transaction the split builds carries the deadline, so the split
+    // is a request boundary like the transaction factories and validates it the
+    // same way, before doing any of the tree work below.
     await expect(
-      TokenSplit.split(token, TestPaymentData.decode, [
-        SplitTokenRequest.create(predicate, new TestPaymentData(PaymentAssetCollection.create(assets[0]))),
-      ]),
+      TokenSplit.split(
+        token,
+        TestPaymentData.decode,
+        [SplitTokenRequest.create(predicate, new TestPaymentData(PaymentAssetCollection.create(...assets)))],
+        { expiresAt: 0n },
+      ),
+    ).rejects.toThrow(/Request deadline/);
+
+    await expect(
+      TokenSplit.split(
+        token,
+        TestPaymentData.decode,
+        [SplitTokenRequest.create(predicate, new TestPaymentData(PaymentAssetCollection.create(assets[0])))],
+        { expiresAt: expiresAt() },
+      ),
     ).rejects.toThrow(TokenAssetCountMismatchError);
 
     await expect(
-      TokenSplit.split(token, TestPaymentData.decode, [
-        SplitTokenRequest.create(
-          predicate,
-          new TestPaymentData(
-            PaymentAssetCollection.create(
-              assets[0],
-              new Asset(new AssetId(crypto.getRandomValues(new Uint8Array(10))), 400n),
+      TokenSplit.split(
+        token,
+        TestPaymentData.decode,
+        [
+          SplitTokenRequest.create(
+            predicate,
+            new TestPaymentData(
+              PaymentAssetCollection.create(
+                assets[0],
+                new Asset(new AssetId(crypto.getRandomValues(new Uint8Array(10))), 400n),
+              ),
             ),
           ),
-        ),
-      ]),
+        ],
+        { expiresAt: expiresAt() },
+      ),
     ).rejects.toThrow(TokenAssetMissingError);
 
     await expect(
-      TokenSplit.split(token, TestPaymentData.decode, [
-        SplitTokenRequest.create(
-          predicate,
-          new TestPaymentData(PaymentAssetCollection.create(assets[0], new Asset(assets[1].id, 1500n))),
-        ),
-      ]),
+      TokenSplit.split(
+        token,
+        TestPaymentData.decode,
+        [
+          SplitTokenRequest.create(
+            predicate,
+            new TestPaymentData(PaymentAssetCollection.create(assets[0], new Asset(assets[1].id, 1500n))),
+          ),
+        ],
+        { expiresAt: expiresAt() },
+      ),
     ).rejects.toThrow(TokenAssetValueMismatchError);
 
     const requests = [
       SplitTokenRequest.create(predicate, new TestPaymentData(PaymentAssetCollection.create(assets[0]))),
       SplitTokenRequest.create(predicate, new TestPaymentData(PaymentAssetCollection.create(assets[1]))),
     ];
-    const result = await TokenSplit.split(token, TestPaymentData.decode, requests);
+    const result = await TokenSplit.split(token, TestPaymentData.decode, requests, { expiresAt: expiresAt() });
 
     certificationData = await CertificationData.fromTransaction(
       result.burn.transaction,
@@ -133,14 +162,13 @@ describe('SplitBuilder Functional Test', () => {
 
     const mintedSplitTokens: Token[] = [];
     for (const splitToken of result.tokens) {
-      const mintTransaction = await MintTransaction.create(
-        splitToken.networkId,
-        splitToken.recipient,
-        await splitToken.paymentData.encode(),
-        splitToken.tokenType,
-        splitToken.salt,
-        SplitMintJustification.create(token, splitToken.proofs).toCBOR(),
-      );
+      const mintTransaction = await MintTransaction.create(splitToken.networkId, splitToken.recipient, {
+        data: await splitToken.paymentData.encode(),
+        expiresAt: expiresAt(),
+        justification: SplitMintJustification.create(token, splitToken.proofs).toCBOR(),
+        salt: splitToken.salt,
+        tokenType: splitToken.tokenType,
+      });
 
       const certificationData = await CertificationData.fromMintTransaction(mintTransaction);
 
@@ -170,9 +198,12 @@ describe('SplitBuilder Functional Test', () => {
     // whole provenance chain iteratively (second-gen output -> burned first-gen split token ->
     // burned original source token).
     const firstGenToken = mintedSplitTokens[0];
-    const secondSplit = await TokenSplit.split(firstGenToken, TestPaymentData.decode, [
-      SplitTokenRequest.create(predicate, new TestPaymentData(PaymentAssetCollection.create(assets[0]))),
-    ]);
+    const secondSplit = await TokenSplit.split(
+      firstGenToken,
+      TestPaymentData.decode,
+      [SplitTokenRequest.create(predicate, new TestPaymentData(PaymentAssetCollection.create(assets[0])))],
+      { expiresAt: expiresAt() },
+    );
 
     const secondBurnCertification = await client.submitCertificationRequest(
       await CertificationData.fromTransaction(
@@ -199,14 +230,13 @@ describe('SplitBuilder Functional Test', () => {
     );
 
     const secondSplitToken = secondSplit.tokens[0];
-    const secondMintTransaction = await MintTransaction.create(
-      secondSplitToken.networkId,
-      secondSplitToken.recipient,
-      await secondSplitToken.paymentData.encode(),
-      secondSplitToken.tokenType,
-      secondSplitToken.salt,
-      SplitMintJustification.create(secondBurnToken, secondSplitToken.proofs).toCBOR(),
-    );
+    const secondMintTransaction = await MintTransaction.create(secondSplitToken.networkId, secondSplitToken.recipient, {
+      data: await secondSplitToken.paymentData.encode(),
+      expiresAt: expiresAt(),
+      justification: SplitMintJustification.create(secondBurnToken, secondSplitToken.proofs).toCBOR(),
+      salt: secondSplitToken.salt,
+      tokenType: secondSplitToken.tokenType,
+    });
 
     expect(
       (await client.submitCertificationRequest(await CertificationData.fromMintTransaction(secondMintTransaction)))
@@ -256,7 +286,10 @@ describe('SplitBuilder Functional Test', () => {
     const predicate = SignaturePredicate.fromSigningService(signingService);
     const assets = [new Asset(new AssetId(crypto.getRandomValues(new Uint8Array(10))), 500n)];
     const paymentData = new TestPaymentData(PaymentAssetCollection.create(...assets));
-    const mintTransaction = await MintTransaction.create(NetworkId.LOCAL, predicate, await paymentData.encode());
+    const mintTransaction = await MintTransaction.create(NetworkId.LOCAL, predicate, {
+      data: await paymentData.encode(),
+      expiresAt: expiresAt(),
+    });
 
     const response = await client.submitCertificationRequest(
       await CertificationData.fromMintTransaction(mintTransaction),
@@ -278,10 +311,17 @@ describe('SplitBuilder Functional Test', () => {
       SplitTokenRequest.create(predicate, new TestPaymentData(PaymentAssetCollection.create(assets[0]))),
     ];
     const burnStateMask = StateMask.generate();
+    const burnTimeout = expiresAt();
 
-    const first = await TokenSplit.split(token, TestPaymentData.decode, requests, burnStateMask);
-    const second = await TokenSplit.split(token, TestPaymentData.decode, requests, burnStateMask);
-    const defaulted = await TokenSplit.split(token, TestPaymentData.decode, requests);
+    const first = await TokenSplit.split(token, TestPaymentData.decode, requests, {
+      burnStateMask: burnStateMask,
+      expiresAt: burnTimeout,
+    });
+    const second = await TokenSplit.split(token, TestPaymentData.decode, requests, {
+      burnStateMask: burnStateMask,
+      expiresAt: burnTimeout,
+    });
+    const defaulted = await TokenSplit.split(token, TestPaymentData.decode, requests, { expiresAt: burnTimeout });
 
     const firstBurn = HexConverter.encode(first.burn.transaction.toCBOR());
     expect(HexConverter.encode(second.burn.transaction.toCBOR())).toEqual(firstBurn);

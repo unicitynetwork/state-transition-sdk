@@ -1,9 +1,9 @@
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 
-import { Secp256k1SignatureVerifier } from './Secp256k1SignatureVerifier.js';
-import { ISigningService } from '../ISigningService.js';
-import { Signature } from './Signature.js';
 import { DataHash } from '../hash/DataHash.js';
+import { ISigningService } from '../ISigningService.js';
+import { Secp256k1SignatureVerifier } from './Secp256k1SignatureVerifier.js';
+import { Signature } from './Signature.js';
 
 /**
  * Default secp256k1 signing service. Wraps a 32-byte private key and exposes

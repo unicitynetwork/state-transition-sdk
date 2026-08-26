@@ -12,6 +12,7 @@ import { DataHash } from '../crypto/hash/DataHash.js';
 import { EncodedPredicate } from '../predicate/EncodedPredicate.js';
 import { PredicateVerifierService } from '../predicate/verification/PredicateVerifierService.js';
 import { CborDeserializer } from '../serialization/cbor/CborDeserializer.js';
+import { CborError } from '../serialization/cbor/CborError.js';
 import { CborSerializer } from '../serialization/cbor/CborSerializer.js';
 import { dedent } from '../util/StringUtils.js';
 import { VerificationError } from '../verification/VerificationError.js';
@@ -36,6 +37,13 @@ export class CertifiedMintTransaction implements ITransaction {
    */
   public get data(): Uint8Array | null {
     return this.transaction.data;
+  }
+
+  /**
+   * @returns {bigint|null} Exclusive request deadline of the inner transaction, in Unix seconds.
+   */
+  public get expiresAt(): bigint | null {
+    return this.transaction.expiresAt;
   }
 
   /**
@@ -64,6 +72,19 @@ export class CertifiedMintTransaction implements ITransaction {
    */
   public get recipient(): EncodedPredicate {
     return this.transaction.recipient;
+  }
+
+  /**
+   * @returns {bigint} Reference time of the round the leaf was created in, in Unix seconds.
+   *
+   * Read from the inclusion proof rather than stored beside it: the service
+   * records the leaf's creation time on the record itself and serves that same
+   * value for every proof of the leaf, and the leaf value binds it, so the
+   * proof is the authenticated source for it.
+   */
+  public get referenceTime(): bigint {
+    // Non-null by construction: every factory below rejects a proof without one.
+    return this.inclusionProof.referenceTime as bigint;
   }
 
   /**
@@ -109,7 +130,14 @@ export class CertifiedMintTransaction implements ITransaction {
    */
   public static async fromCBOR(bytes: Uint8Array): Promise<CertifiedMintTransaction> {
     const data = CborDeserializer.decodeArray(bytes, 2);
-    return new CertifiedMintTransaction(await MintTransaction.fromCBOR(data[0]), InclusionProof.fromCBOR(data[1]));
+    const proof = InclusionProof.fromCBOR(data[1]);
+    // A certified transaction is one bound to a leaf. A proof that reports no
+    // leaf cannot certify anything, and decoding it into one would hand every
+    // later verifier a transaction with no reference time.
+    if (proof.referenceTime == null) {
+      throw new CborError('Certified mint transaction carries an inclusion proof with no certified leaf.');
+    }
+    return new CertifiedMintTransaction(await MintTransaction.fromCBOR(data[0]), proof);
   }
 
   /**
@@ -136,6 +164,7 @@ export class CertifiedMintTransaction implements ITransaction {
       unicityCertificateVerifier,
       inclusionProof,
       await transaction.calculateTransactionHash(),
+      transaction.expiresAt,
       transaction.lockScript,
       transaction.sourceStateHash,
     );
@@ -174,6 +203,7 @@ export class CertifiedMintTransaction implements ITransaction {
     return dedent`
       CertifiedMintTransaction
         ${this.transaction.toString()}
+        Reference Time: ${this.referenceTime.toString()}
         ${this.inclusionProof.toString()}`;
   }
 }

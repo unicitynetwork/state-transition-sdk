@@ -62,6 +62,7 @@ export class CertifiedMintTransactionVerificationRule {
       verificationContext.unicityCertificateVerifier,
       genesis.inclusionProof,
       await genesis.calculateTransactionHash(),
+      genesis.expiresAt,
       genesis.lockScript,
       genesis.sourceStateHash,
     );

@@ -1,5 +1,7 @@
 import { CertifiedTransferTransaction } from './CertifiedTransferTransaction.js';
+import { validateExpiresAt } from './ExpiresAt.js';
 import { ITransaction } from './ITransaction.js';
+import { ITransferOptions } from './ITransferOptions.js';
 import { StateMask } from './StateMask.js';
 import { Token } from './Token.js';
 import { RootTrustBase } from '../api/bft/RootTrustBase.js';
@@ -22,12 +24,15 @@ import { dedent } from '../util/StringUtils.js';
  */
 export class TransferTransaction implements ITransaction {
   public static readonly CBOR_TAG = 39045n;
-  private static readonly VERSION = 1n;
+  /** The only accepted wire version. One version, one element count. */
+  public static readonly VERSION = 2n;
+  private static readonly FIELD_COUNT = 5;
 
   private constructor(
     public readonly sourceStateHash: DataHash,
     public readonly lockScript: EncodedPredicate,
     public readonly recipient: EncodedPredicate,
+    public readonly expiresAt: bigint | null,
     private readonly _stateMask: StateMask,
     private readonly _data: Uint8Array | null,
   ) {}
@@ -47,7 +52,7 @@ export class TransferTransaction implements ITransaction {
   }
 
   /**
-   * @returns {bigint} Wire-format version of this transaction.
+   * @returns {bigint} Wire-format version of this transfer transaction.
    */
   public get version(): bigint {
     return TransferTransaction.VERSION;
@@ -59,25 +64,56 @@ export class TransferTransaction implements ITransaction {
    * @param {Token} token Token being transferred (last transaction is used as the source).
    * @param {IPredicate} recipient Predicate that will lock the new state.
    * @param {StateMask} stateMask State mask mixed into the new state hash.
-   * @param {Uint8Array|null} data Optional data payload.
+   * @param {ITransferOptions} options Optional data payload and request deadline.
    * @returns {Promise<TransferTransaction>} New transfer transaction.
    */
   public static async create(
     token: Token,
     recipient: IPredicate,
     stateMask: StateMask,
-    data: Uint8Array | null = null,
+    options: ITransferOptions = {},
   ): Promise<TransferTransaction> {
-    data = data ? new Uint8Array(data) : null;
+    const expiresAt = validateExpiresAt(options.expiresAt ?? null);
+    const data = options.data ? new Uint8Array(options.data) : null;
 
     const transaction = token.latestTransaction;
     return new TransferTransaction(
       await transaction.calculateStateHash(),
       transaction.recipient,
       EncodedPredicate.fromPredicate(recipient),
+      expiresAt,
       stateMask,
       data,
     );
+  }
+
+  /**
+   * Read the request deadline out of encoded transfer bytes.
+   *
+   * A full decode needs the token the transfer belongs to, for the source state
+   * and lock script it derives from the chain. A consumer that holds only the
+   * transfer bytes — the worker wire format below is the one in this SDK — can
+   * still recover the deadline from them, and must, because these are the bytes
+   * the transaction hash commits to. Being told the deadline out of band
+   * instead leaves the value unauthenticated.
+   *
+   * @param {Uint8Array} bytes Encoded transfer transaction.
+   * @returns {bigint|null} Exclusive request deadline in Unix seconds, or `null` when the service assigned one.
+   * @throws {CborError} On wrong tag or unsupported version.
+   */
+  public static expiresAtFromCBOR(bytes: Uint8Array): bigint | null {
+    const tag = CborDeserializer.decodeTag(bytes);
+    if (tag.tag !== TransferTransaction.CBOR_TAG) {
+      throw new CborError(`Invalid CBOR tag for TransferTransaction: ${tag.tag}`);
+    }
+
+    const data = CborDeserializer.decodeArray(tag.data, TransferTransaction.FIELD_COUNT);
+    const version = CborDeserializer.decodeUnsignedInteger(data[0]);
+    if (version !== TransferTransaction.VERSION) {
+      throw new CborError(`Unsupported TransferTransaction version: ${version}`);
+    }
+
+    return CborDeserializer.decodeNullable(data[4], CborDeserializer.decodeUnsignedInteger);
   }
 
   /**
@@ -94,18 +130,16 @@ export class TransferTransaction implements ITransaction {
       throw new CborError(`Invalid CBOR tag for TransferTransaction: ${tag.tag}`);
     }
 
-    const data = CborDeserializer.decodeArray(tag.data, 4);
+    const data = CborDeserializer.decodeArray(tag.data, TransferTransaction.FIELD_COUNT);
     const version = CborDeserializer.decodeUnsignedInteger(data[0]);
     if (version !== TransferTransaction.VERSION) {
       throw new CborError(`Unsupported TransferTransaction version: ${version}`);
     }
 
-    return TransferTransaction.create(
-      token,
-      EncodedPredicate.fromCBOR(data[1]),
-      StateMask.fromCBOR(data[2]),
-      CborDeserializer.decodeNullable(data[3], CborDeserializer.decodeByteString),
-    );
+    return TransferTransaction.create(token, EncodedPredicate.fromCBOR(data[1]), StateMask.fromCBOR(data[2]), {
+      data: CborDeserializer.decodeNullable(data[3], CborDeserializer.decodeByteString),
+      expiresAt: CborDeserializer.decodeNullable(data[4], CborDeserializer.decodeUnsignedInteger),
+    });
   }
 
   /**
@@ -136,10 +170,11 @@ export class TransferTransaction implements ITransaction {
     return CborSerializer.encodeTag(
       TransferTransaction.CBOR_TAG,
       CborSerializer.encodeArray(
-        CborSerializer.encodeUnsignedInteger(this.version),
+        CborSerializer.encodeUnsignedInteger(TransferTransaction.VERSION),
         this.recipient.toCBOR(),
         this._stateMask.toCBOR(),
         CborSerializer.encodeNullable(this._data, CborSerializer.encodeByteString),
+        CborSerializer.encodeNullable(this.expiresAt, CborSerializer.encodeUnsignedInteger),
       ),
     );
   }
@@ -174,12 +209,13 @@ export class TransferTransaction implements ITransaction {
   public toString(): string {
     return dedent`
       TransferTransaction
-        Version: ${this.version.toString()}
+        Version: ${TransferTransaction.VERSION.toString()}
         Source State Hash: ${this.sourceStateHash.toString()}
         Lock Script: 
           ${this.lockScript.toString()}
         Recipient: ${this.recipient.toString()}
         StateMask: ${this._stateMask.toString()}
-        Data: ${this._data ? HexConverter.encode(this._data) : 'null'}`;
+        Data: ${this._data ? HexConverter.encode(this._data) : 'null'}
+        Expires At: ${this.expiresAt?.toString() ?? 'service assigned'}`;
   }
 }

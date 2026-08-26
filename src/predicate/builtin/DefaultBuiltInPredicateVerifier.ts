@@ -49,6 +49,7 @@ export class DefaultBuiltInPredicateVerifier implements IPredicateVerifier {
    */
   public verify(
     predicate: EncodedPredicate,
+    referenceTime: bigint,
     sourceStateHash: DataHash,
     transactionHash: DataHash,
     unlockScript: Uint8Array,
@@ -60,6 +61,6 @@ export class DefaultBuiltInPredicateVerifier implements IPredicateVerifier {
       throw new Error('Unsupported predicate type for verification.');
     }
 
-    return verifier.verify(predicate, sourceStateHash, transactionHash, unlockScript);
+    return verifier.verify(predicate, referenceTime, sourceStateHash, transactionHash, unlockScript);
   }
 }

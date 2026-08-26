@@ -1,3 +1,4 @@
+import { TransferTransaction } from '../../TransferTransaction.js';
 import { ITokenVerifier } from '../ITokenVerifier.js';
 import { IVerificationContext } from '../IVerificationContext.js';
 import { IWorker } from './IWorker.js';
@@ -139,6 +140,7 @@ class WorkerTransferTransaction {
     private readonly bytes: Uint8Array,
     public readonly sourceStateHash: DataHash,
     public readonly lockScript: EncodedPredicate,
+    public readonly expiresAt: bigint | null,
     public readonly inclusionProof: InclusionProof,
   ) {}
 
@@ -156,6 +158,10 @@ class WorkerTransferTransaction {
       certified[0],
       DataHash.fromImprint(CborDeserializer.decodeByteString(data[1])),
       EncodedPredicate.fromCBOR(data[2]),
+      // Recovered from the transfer bytes the transaction hash commits to, not
+      // carried alongside them: a copy outside those bytes is unauthenticated,
+      // and nothing downstream could tell the two apart if they disagreed.
+      TransferTransaction.expiresAtFromCBOR(certified[0]),
       InclusionProof.fromCBOR(certified[1]),
     );
   }
@@ -204,6 +210,7 @@ class WorkerTransferTransaction {
       unicityCertificateVerifier,
       this.inclusionProof,
       await this.calculateTransactionHash(),
+      this.expiresAt,
       this.lockScript,
       this.sourceStateHash,
     );

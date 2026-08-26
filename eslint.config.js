@@ -10,7 +10,7 @@ export default defineConfig(
   tsEslint.configs.recommendedTypeChecked,
   eslintConfigPrettier,
   eslintImport.flatConfigs.recommended,
-  globalIgnores(['tests/integration/docker/**', 'tests/utils/*.mjs']),
+  globalIgnores(['tests/integration/docker/**', 'tests/integration/support/*.mjs', 'tests/utils/*.mjs']),
   {
     languageOptions: {
       ecmaVersion: 2018,

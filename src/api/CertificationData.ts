@@ -17,19 +17,23 @@ import { dedent } from '../util/StringUtils.js';
  */
 export class CertificationData {
   public static readonly CBOR_TAG = 39031n;
-  private static readonly VERSION = 1n;
+  /** The only accepted wire version. One version, one element count. */
+  public static readonly VERSION = 2n;
+  private static readonly FIELD_COUNT = 6;
 
   /**
    * Create a certification data object.
    * @param {IPredicate} lockScript
    * @param {DataHash} sourceStateHash
    * @param {DataHash} transactionHash
+   * @param {bigint|null} expiresAt Exclusive request deadline in Unix seconds, or `null` when the service assigns one
    * @param {Uint8Array} _unlockScript Unlock script bytes
    */
   private constructor(
     public readonly lockScript: EncodedPredicate,
     public readonly sourceStateHash: DataHash,
     public readonly transactionHash: DataHash,
+    public readonly expiresAt: bigint | null,
     private readonly _unlockScript: Uint8Array,
   ) {
     this._unlockScript = new Uint8Array(_unlockScript);
@@ -61,7 +65,7 @@ export class CertificationData {
       throw new CborError(`Invalid CBOR tag for CertificationData: ${tag.tag}`);
     }
 
-    const data = CborDeserializer.decodeArray(tag.data, 5);
+    const data = CborDeserializer.decodeArray(tag.data, CertificationData.FIELD_COUNT);
     const version = CborDeserializer.decodeUnsignedInteger(data[0]);
     if (version !== CertificationData.VERSION) {
       throw new CborError(`Unsupported CertificationData version: ${version}`);
@@ -71,7 +75,8 @@ export class CertificationData {
       EncodedPredicate.fromCBOR(data[1]),
       new DataHash(HashAlgorithm.SHA256, CborDeserializer.decodeByteString(data[2])),
       new DataHash(HashAlgorithm.SHA256, CborDeserializer.decodeByteString(data[3])),
-      CborDeserializer.decodeByteString(data[4]),
+      CborDeserializer.decodeNullable(data[4], CborDeserializer.decodeUnsignedInteger),
+      CborDeserializer.decodeByteString(data[5]),
     );
   }
 
@@ -107,6 +112,7 @@ export class CertificationData {
       transaction.lockScript,
       transaction.sourceStateHash,
       transactionHash,
+      transaction.expiresAt,
       unlockScript.encode(),
     );
   }
@@ -120,10 +126,11 @@ export class CertificationData {
     return CborSerializer.encodeTag(
       CertificationData.CBOR_TAG,
       CborSerializer.encodeArray(
-        CborSerializer.encodeUnsignedInteger(this.version),
+        CborSerializer.encodeUnsignedInteger(CertificationData.VERSION),
         this.lockScript.toCBOR(),
         CborSerializer.encodeByteString(this.sourceStateHash.data),
         CborSerializer.encodeByteString(this.transactionHash.data),
+        CborSerializer.encodeNullable(this.expiresAt, CborSerializer.encodeUnsignedInteger),
         CborSerializer.encodeByteString(this._unlockScript),
       ),
     );
@@ -141,6 +148,7 @@ export class CertificationData {
           ${this.lockScript.toString()}
         Source State Hash: ${this.sourceStateHash.toString()}
         Transaction Hash: ${this.transactionHash.toString()}
+        Expires At: ${this.expiresAt?.toString() ?? 'service assigned'}
         Witness: ${HexConverter.encode(this._unlockScript)}`;
   }
 }

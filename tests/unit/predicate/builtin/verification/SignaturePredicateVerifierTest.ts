@@ -11,6 +11,7 @@ import { CborSerializer } from '../../../../../src/serialization/cbor/CborSerial
 import { VerificationStatus } from '../../../../../src/verification/VerificationStatus.js';
 
 describe('SignaturePredicateVerifier', () => {
+  const REFERENCE_TIME = 1755000000n;
   const verifier = new SignaturePredicateVerifier(new Secp256k1SignatureVerifier());
   const signingService = SigningService.generate();
   const encodedPredicate = EncodedPredicate.fromPredicate(SignaturePredicate.fromSigningService(signingService));
@@ -37,7 +38,13 @@ describe('SignaturePredicateVerifier', () => {
   it('should accept a valid unlock script', async () => {
     const { sourceStateHash, transactionHash, signature } = await signUnlock();
 
-    const result = await verifier.verify(encodedPredicate, sourceStateHash, transactionHash, signature.encode());
+    const result = await verifier.verify(
+      encodedPredicate,
+      REFERENCE_TIME,
+      sourceStateHash,
+      transactionHash,
+      signature.encode(),
+    );
 
     expect(result.status).toBe(VerificationStatus.OK);
   });
@@ -47,7 +54,13 @@ describe('SignaturePredicateVerifier', () => {
 
     const tampered = new Signature(signature.bytes, signature.recovery ^ 1);
 
-    const result = await verifier.verify(encodedPredicate, sourceStateHash, transactionHash, tampered.encode());
+    const result = await verifier.verify(
+      encodedPredicate,
+      REFERENCE_TIME,
+      sourceStateHash,
+      transactionHash,
+      tampered.encode(),
+    );
 
     expect(result.status).toBe(VerificationStatus.FAIL);
   });
@@ -57,7 +70,13 @@ describe('SignaturePredicateVerifier', () => {
 
     const tampered = new Signature(signature.bytes, 2);
 
-    const result = await verifier.verify(encodedPredicate, sourceStateHash, transactionHash, tampered.encode());
+    const result = await verifier.verify(
+      encodedPredicate,
+      REFERENCE_TIME,
+      sourceStateHash,
+      transactionHash,
+      tampered.encode(),
+    );
 
     expect(result.status).toBe(VerificationStatus.FAIL);
   });

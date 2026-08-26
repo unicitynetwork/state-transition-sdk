@@ -1,4 +1,6 @@
 import { CertifiedMintTransaction } from './CertifiedMintTransaction.js';
+import { validateExpiresAt } from './ExpiresAt.js';
+import { IMintOptions } from './IMintOptions.js';
 import { ITransaction } from './ITransaction.js';
 import { MintTransactionState } from './MintTransactionState.js';
 import { StateMask } from './StateMask.js';
@@ -28,7 +30,9 @@ import { dedent } from '../util/StringUtils.js';
  */
 export class MintTransaction implements ITransaction {
   public static readonly CBOR_TAG = 39041n;
-  private static readonly VERSION = 1n;
+  /** The only accepted wire version. One version, one element count. */
+  public static readonly VERSION = 2n;
+  private static readonly FIELD_COUNT = 8;
 
   private readonly _brand = 'MintTransaction' as const;
 
@@ -40,6 +44,7 @@ export class MintTransaction implements ITransaction {
     public readonly salt: TokenSalt,
     public readonly tokenType: TokenType,
     public readonly tokenId: TokenId,
+    public readonly expiresAt: bigint | null,
     private readonly _justification: Uint8Array | null,
     private readonly _data: Uint8Array | null,
   ) {}
@@ -66,7 +71,7 @@ export class MintTransaction implements ITransaction {
   }
 
   /**
-   * @returns {bigint} Wire-format version of this transaction.
+   * @returns {bigint} Wire-format version of this mint transaction.
    */
   public get version(): bigint {
     return MintTransaction.VERSION;
@@ -77,22 +82,18 @@ export class MintTransaction implements ITransaction {
    *
    * @param {NetworkId} networkId Network identifier.
    * @param {IPredicate} recipient Predicate that will lock the minted state.
-   * @param {Uint8Array|null} data Optional data payload.
-   * @param {TokenType} tokenType Token type being minted.
-   * @param {TokenSalt} salt Mint-transaction salt; defaults to a random 32-byte salt.
-   * @param {Uint8Array|null} justification Optional mint justification bytes.
+   * @param {IMintOptions} options Optional data, token type, salt, justification and request deadline.
    * @returns {Promise<MintTransaction>} New mint transaction.
    */
   public static async create(
     networkId: NetworkId,
     recipient: IPredicate,
-    data: Uint8Array | null = null,
-    tokenType: TokenType = TokenType.generate(),
-    salt: TokenSalt = TokenSalt.generate(),
-    justification: Uint8Array | null = null,
+    options: IMintOptions = {},
   ): Promise<MintTransaction> {
-    justification = justification ? new Uint8Array(justification) : null;
-    data = data ? new Uint8Array(data) : null;
+    const { tokenType = TokenType.generate(), salt = TokenSalt.generate() } = options;
+    const expiresAt = validateExpiresAt(options.expiresAt ?? null);
+    const justification = options.justification ? new Uint8Array(options.justification) : null;
+    const data = options.data ? new Uint8Array(options.data) : null;
 
     const tokenId = await TokenId.fromSalt(networkId, salt);
     const signingService = await MintSigningService.create(tokenId);
@@ -104,6 +105,7 @@ export class MintTransaction implements ITransaction {
       salt,
       tokenType,
       tokenId,
+      expiresAt,
       justification,
       data,
     );
@@ -122,7 +124,7 @@ export class MintTransaction implements ITransaction {
       throw new CborError(`Invalid CBOR tag for MintTransaction: ${tag.tag}`);
     }
 
-    const data = CborDeserializer.decodeArray(tag.data, 7);
+    const data = CborDeserializer.decodeArray(tag.data, MintTransaction.FIELD_COUNT);
     const version = CborDeserializer.decodeUnsignedInteger(data[0]);
     if (version !== MintTransaction.VERSION) {
       throw new CborError(`Unsupported MintTransaction version: ${version}`);
@@ -131,10 +133,13 @@ export class MintTransaction implements ITransaction {
     return MintTransaction.create(
       NetworkId.fromId(CborDeserializer.decodeUnsignedInteger(data[1])),
       EncodedPredicate.fromCBOR(data[2]),
-      CborDeserializer.decodeNullable(data[6], CborDeserializer.decodeByteString),
-      TokenType.fromCBOR(data[4]),
-      TokenSalt.fromCBOR(data[3]),
-      CborDeserializer.decodeNullable(data[5], CborDeserializer.decodeByteString),
+      {
+        data: CborDeserializer.decodeNullable(data[6], CborDeserializer.decodeByteString),
+        expiresAt: CborDeserializer.decodeNullable(data[7], CborDeserializer.decodeUnsignedInteger),
+        justification: CborDeserializer.decodeNullable(data[5], CborDeserializer.decodeByteString),
+        salt: TokenSalt.fromCBOR(data[3]),
+        tokenType: TokenType.fromCBOR(data[4]),
+      },
     );
   }
 
@@ -166,13 +171,14 @@ export class MintTransaction implements ITransaction {
     return CborSerializer.encodeTag(
       MintTransaction.CBOR_TAG,
       CborSerializer.encodeArray(
-        CborSerializer.encodeUnsignedInteger(this.version),
+        CborSerializer.encodeUnsignedInteger(MintTransaction.VERSION),
         CborSerializer.encodeUnsignedInteger(this.networkId.id),
         this.recipient.toCBOR(),
         this.salt.toCBOR(),
         this.tokenType.toCBOR(),
         CborSerializer.encodeNullable(this._justification, CborSerializer.encodeByteString),
         CborSerializer.encodeNullable(this._data, CborSerializer.encodeByteString),
+        CborSerializer.encodeNullable(this.expiresAt, CborSerializer.encodeUnsignedInteger),
       ),
     );
   }
@@ -207,7 +213,7 @@ export class MintTransaction implements ITransaction {
   public toString(): string {
     return dedent`
       MintTransaction
-        Version: ${this.version.toString()}
+        Version: ${MintTransaction.VERSION.toString()}
         Network ID: ${this.networkId.toString()}
         Lock Script:
           ${this.lockScript.toString()}
@@ -216,6 +222,7 @@ export class MintTransaction implements ITransaction {
         Token ID: ${this.tokenId.toString()}
         Token Type: ${this.tokenType.toString()}
         Mint Justification: ${this._justification ? HexConverter.encode(this._justification) : 'null'}
-        Data: ${this._data ? HexConverter.encode(this._data) : 'null'}`;
+        Data: ${this._data ? HexConverter.encode(this._data) : 'null'}
+        Expires At: ${this.expiresAt?.toString() ?? 'service assigned'}`;
   }
 }
