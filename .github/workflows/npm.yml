@@ -63,3 +63,29 @@ jobs:
         env:
           CI: true
           RELEASE_TAG: ${{ github.event.release.tag_name }}
+
+  integration:
+    name: Integration against a real aggregator
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.x'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Testcontainers starts the stack in tests/integration/docker — a BFT root
+      # node, mongodb, redis and a pinned aggregator build — waits for consensus
+      # to certify a round, and tears it down afterwards. Nothing external is
+      # involved, and the aggregator is published on an ephemeral port, so
+      # concurrent jobs on a runner cannot collide.
+      - name: Run integration tests
+        run: npm run test:integration

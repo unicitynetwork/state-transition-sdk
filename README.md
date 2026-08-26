@@ -137,27 +137,32 @@ npm run test:examples
 ```
 
 Run the integration suite. It talks to a real aggregator, but owns the one it
-talks to: `scripts/integration-aggregator.sh` starts the stack in
+talks to: Testcontainers starts the stack in
 [`tests/integration/docker`](./tests/integration/docker) — a BFT root node,
-mongodb, redis and a pinned aggregator build — and waits until consensus is
-certifying. Nothing external is involved.
+mongodb, redis and a pinned aggregator build — waits for consensus to certify a
+round, and tears it down afterwards. Nothing external is involved, and no setup
+is needed:
+
+```bash
+npm run test:integration
+```
+
+That pays a cold start of roughly a minute per run. While iterating, start the
+stack once and point the suite at it — it reuses a stack it did not start, and
+leaves it running:
 
 ```bash
 npm run integration:up
-npm run test:integration
+eval "$(./scripts/integration-aggregator.sh env)"
+npm run test:integration   # ~20s
 npm run integration:down
 ```
-
-The suite finds the stack on its own: it defaults to `http://localhost:3000` and
-to the trust base the root node generates on first start, so no environment
-setup is needed. `integration:down` deletes that genesis, so the next
-`integration:up` starts from a clean chain.
 
 This is where the wire formats get checked. Certification data, the transaction
 encodings, the inclusion proof and the reference-time-bound leaf value are all
 shared with the service, and the fake aggregator in `tests/functional` derives
 them with the very code under test — only a real service can tell whether the
-two still agree. Run it before changing anything on the wire.
+two still agree.
 
 Run the end-to-end suite against a deployed network. Unlike the integration
 suite this one has no service of its own, so point it at an endpoint and supply
@@ -170,7 +175,8 @@ AGGREGATOR_API_KEY=<key, if the endpoint requires one> \
 npm run test:e2e
 ```
 
-Neither suite runs in CI — one needs a docker stack, the other a live network.
+The integration suite runs in CI; the e2e suite does not, since it needs a live
+network to be pointed at.
 
 ### Linting
 
