@@ -21,6 +21,36 @@ In this system, tokens are self-contained entities containing complete transacti
 npm install @unicitylabs/state-transition-sdk
 ```
 
+## Upgrading to 3.0
+
+3.0 changes the formats the SDK shares with the Unicity Service, so it is not
+interoperable with 2.x in either direction. There is no migration path for
+tokens already in circulation.
+
+**Tokens minted by 2.x cannot be loaded.** `Token.VERSION` is now 2, and
+`Token.fromCBOR` rejects an older token with `Unsupported Token version: 1`.
+`MintTransaction`, `TransferTransaction` and `CertificationData` moved to
+version 2 with it. Affected tokens have to be re-minted.
+
+**A 3.0 client needs an aggregator that speaks the new protocol**, at
+`ghcr.io/unicitynetwork/aggregator-go:sha-ae08165` or later. The certified leaf
+value is now `SHA-256(CBOR([transactionHash, referenceTime]))` rather than the
+transaction hash alone, so proofs from a 2.x-era service do not verify here, and
+a 2.x client cannot verify proofs from a current one.
+
+**Requests carry a deadline.** `MintTransaction.create`, `TransferTransaction.create`
+and `TokenSplit.split` take an optional `expiresAt`; see
+[Request deadlines](#request-deadlines) below.
+
+Compile-time breaks for anyone building on the verification internals:
+
+| Change | What breaks |
+|---|---|
+| `InclusionProofVerificationRule.verify` no longer takes `referenceTime` | it is read from the inclusion proof instead |
+| `InclusionProofVerificationStatus.REFERENCE_TIME_MISMATCH` removed | replaced by `REFERENCE_TIME_AFTER_ROUND` and `INCOMPLETE_INCLUSION_PROOF` |
+| Certified mint and transfer CBOR is 2 elements, was 3 | the reference time is no longer stored beside the proof that carries it |
+| `expiresAt` is validated at the factories | a negative, zero or over-wide deadline now throws instead of failing later inside CBOR encoding |
+
 ## Quick Start
 
 End-to-end runnable examples live under [`tests/examples/`](./tests/examples):
@@ -46,6 +76,32 @@ A thin client over the aggregator. As a consumer you'll typically:
 
 - `submitCertificationRequest()` - Submit a commitment to the aggregator
 - `getInclusionProof()` - Retrieve an inclusion proof for a state id
+
+### Request deadlines
+
+Every certification request carries an exclusive deadline. Supply one as
+`expiresAt`, in Unix seconds, and the Unicity Service admits the request only to
+a round whose reference time is strictly below it:
+
+```ts
+const transaction = await MintTransaction.create(networkId, recipient, {
+  expiresAt: BigInt(Math.floor(Date.now() / 1000)) + 3600n,
+});
+```
+
+Omit it, or pass `null`, and the service derives a deadline from consensus time
+instead. That suits a caller with no trustworthy clock: the assigned value is
+service metadata, never recorded in the leaf and never re-checked by a later
+verifier, so it does not have to be agreed on in advance.
+
+An explicit deadline is different — the transaction hash commits to it, so it
+travels with the token and every verifier re-checks it against the reference
+time the leaf was created under. Submitting after it has passed is answered with
+`CertificationStatus.REQUEST_EXPIRED`; a service that has not yet been given a
+consensus reference time answers `SERVICE_NOT_READY`.
+
+See [Security Features](#security-features) for what a deadline does and does
+not guarantee.
 
 ### Transaction Flow
 
