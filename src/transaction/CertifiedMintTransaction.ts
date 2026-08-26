@@ -40,7 +40,7 @@ export class CertifiedMintTransaction implements ITransaction {
   }
 
   /**
-   * @returns {bigint|null} Exclusive request deadline of the inner transaction.
+   * @returns {bigint|null} Exclusive request deadline of the inner transaction, in Unix seconds.
    */
   public get expiresAt(): bigint | null {
     return this.transaction.expiresAt;
@@ -75,7 +75,7 @@ export class CertifiedMintTransaction implements ITransaction {
   }
 
   /**
-   * @returns {bigint} Reference time of the round the leaf was created in.
+   * @returns {bigint} Reference time of the round the leaf was created in, in Unix seconds.
    *
    * Read from the inclusion proof rather than stored beside it: the service
    * records the leaf's creation time on the record itself and serves that same

@@ -43,7 +43,7 @@ export class InclusionProofVerificationRule {
    * @param {PredicateVerifierService} predicateVerifierFactory Predicate verifier service.
    * @param {InclusionProof} inclusionProof Inclusion proof to verify.
    * @param {DataHash} transactionHash Canonical hash of the transaction.
-   * @param {bigint|null} expiresAt Exclusive request deadline, or `null` when the service assigned one.
+   * @param {bigint|null} expiresAt Exclusive request deadline in Unix seconds, or `null` when the service assigned one.
    * @param {EncodedPredicate} lockScript Lock script the transaction unlocks.
    * @param {DataHash} sourceStateHash Hash of the state the transaction spends.
    * @returns {Promise<VerificationResult<InclusionProofVerificationStatus>>} Verification outcome.
@@ -122,6 +122,11 @@ export class InclusionProofVerificationRule {
     // The request was admissible only in a round strictly before its deadline. A
     // request that carried no deadline was admitted under a service-assigned one,
     // which is not recorded and is not re-checked here.
+    //
+    // Both sides are Unix seconds, and both are consensus time rather than any
+    // caller's clock: the reference time is the round's own timestamp, taken
+    // from the BFT seal. A deadline set from a local clock is therefore compared
+    // against the root chain's, and the two can differ by seconds.
     if (expiresAt != null && referenceTime >= expiresAt) {
       return new VerificationResult('InclusionProofVerificationRule', InclusionProofVerificationStatus.REQUEST_EXPIRED);
     }

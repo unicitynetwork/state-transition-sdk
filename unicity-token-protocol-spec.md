@@ -172,6 +172,8 @@ The combination of these elements creates a robust system where token states can
 
 A commitment submitted to the Unicity Aggregator carries a deadline: the point beyond which the sender no longer wants it committed. The aggregator groups commitments into rounds, and each round is pinned to a single reference time drawn from consensus. A commitment is admitted to a round only when that round's reference time is strictly below the deadline — the deadline is exclusive, so a round whose reference time has reached it is already too late.
 
+Both the deadline and a round's reference time are **wall-clock instants in Unix seconds**, not round numbers or block heights. The reference time is the timestamp of the consensus seal that certified the preceding round, so it is the root chain's clock rather than any participant's. A sender that derives a deadline from its own clock is therefore comparing against a clock it does not control, and the two can differ by seconds; deadlines are meant to be set with enough margin to absorb that, and a sender with no trustworthy clock omits the deadline entirely (below).
+
 The deadline exists because submission and commitment are separated in time. A commitment that sits in the queue while conditions change — a price moves, an offer lapses, a counterparty withdraws — should expire rather than execute late. Without a deadline, a sender has no way to bound how long a submitted commitment stays live.
 
 A sender may supply the deadline explicitly, or leave it to the service:

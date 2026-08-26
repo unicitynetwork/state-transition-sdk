@@ -98,7 +98,7 @@ export class TransferTransaction implements ITransaction {
    * instead leaves the value unauthenticated.
    *
    * @param {Uint8Array} bytes Encoded transfer transaction.
-   * @returns {bigint|null} Exclusive request deadline, or `null` when the service assigned one.
+   * @returns {bigint|null} Exclusive request deadline in Unix seconds, or `null` when the service assigned one.
    * @throws {CborError} On wrong tag or unsupported version.
    */
   public static expiresAtFromCBOR(bytes: Uint8Array): bigint | null {

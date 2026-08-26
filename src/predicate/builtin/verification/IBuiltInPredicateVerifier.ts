@@ -18,7 +18,7 @@ export interface IBuiltInPredicateVerifier {
    * Verify an unlock script against the predicate.
    *
    * @param {EncodedPredicate} predicate Predicate being unlocked.
-   * @param {bigint} referenceTime Reference time the transition was validated under.
+   * @param {bigint} referenceTime Reference time the transition was validated under, in Unix seconds.
    * @param {DataHash} sourceStateHash Hash of the state being spent.
    * @param {DataHash} transactionHash Hash of the spending transaction.
    * @param {Uint8Array} unlockScript Witness bytes for the predicate.

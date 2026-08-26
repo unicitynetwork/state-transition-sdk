@@ -14,7 +14,7 @@ import { CborSerializer } from '../serialization/cbor/CborSerializer.js';
  * the value the transition was validated under, for any proof of that leaf.
  *
  * @param {DataHash} transactionHash Transaction hash of the certified request.
- * @param {bigint} referenceTime Reference time of the round the request was validated in.
+ * @param {bigint} referenceTime Reference time of the round the request was validated in, in Unix seconds.
  * @returns {Promise<DataHash>} Leaf value.
  */
 export function calculateLeafValue(transactionHash: DataHash, referenceTime: bigint): Promise<DataHash> {

@@ -89,6 +89,13 @@ const transaction = await MintTransaction.create(networkId, recipient, {
 });
 ```
 
+The value is a wall-clock instant in **Unix seconds**, not a round number or
+block height, and it is compared against the round's reference time — which is
+the timestamp of the consensus seal, i.e. the root chain's clock, not yours. The
+two can differ by seconds, so leave enough margin to absorb the skew and the
+time a request spends queued. Hour-scale deadlines are unaffected; second-scale
+ones are not.
+
 Omit it, or pass `null`, and the service derives a deadline from consensus time
 instead. That suits a caller with no trustworthy clock: the assigned value is
 service metadata, never recorded in the leaf and never re-checked by a later
