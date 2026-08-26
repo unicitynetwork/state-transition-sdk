@@ -1,20 +1,24 @@
 #!/usr/bin/env bash
 #
-# Bring the local aggregator stack in tests/e2e/docker up or down.
+# Bring the local aggregator stack in tests/integration/docker up or down.
 #
-#   scripts/e2e-aggregator.sh up      start the stack and wait until it certifies
-#   scripts/e2e-aggregator.sh down    stop it and delete the generated genesis
-#   scripts/e2e-aggregator.sh logs    follow the aggregator log
-#   scripts/e2e-aggregator.sh env     print the exports the e2e suite needs
+#   scripts/integration-aggregator.sh up     start the stack and wait until it certifies
+#   scripts/integration-aggregator.sh down   stop it and delete the generated genesis
+#   scripts/integration-aggregator.sh logs   follow the aggregator log
+#   scripts/integration-aggregator.sh env    print overrides for pointing a suite here
 #
 # `up` blocks until consensus has produced at least one block, because until
 # then the aggregator answers every certification request with
 # SERVICE_NOT_READY rather than certifying it.
+#
+# The integration suite finds this stack on its own — it defaults to localhost
+# and to the genesis written below — so `env` is only needed to point the e2e
+# suite, or another tool, at it.
 
 set -euo pipefail
 
 readonly REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-readonly COMPOSE_DIR="${REPO_ROOT}/tests/e2e/docker"
+readonly COMPOSE_DIR="${REPO_ROOT}/tests/integration/docker"
 readonly DATA_DIR="${COMPOSE_DIR}/data"
 readonly TRUST_BASE_PATH="${DATA_DIR}/genesis/trust-base.json"
 readonly AGGREGATOR_PORT="${AGGREGATOR_PORT:-3000}"
@@ -58,11 +62,14 @@ wait_for_certification() {
 case "${1:-up}" in
 up)
   mkdir -p "${DATA_DIR}/genesis" "${DATA_DIR}/genesis-root"
-  compose up -d --wait
+  # `--wait` is a convenience, not the gate: the aggregator has a restart policy,
+  # and a container that exits once and comes back healthy fails `--wait` while
+  # ending up perfectly usable. wait_for_certification below is the real check,
+  # and it tolerates a restart because it polls for the outcome we need.
+  compose up -d --wait || echo "Some services reported unhealthy on start; waiting for certification anyway."
   wait_for_certification
   echo
-  echo "Run the e2e suite with:"
-  echo "  $(printf '%q' "${BASH_SOURCE[0]}") env"
+  echo "Run the integration suite with: npm run test:integration"
   ;;
 down)
   compose down -v --remove-orphans

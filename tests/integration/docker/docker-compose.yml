@@ -1,11 +1,11 @@
-# Local aggregator stack the e2e suite runs against.
+# Local aggregator stack the integration suite runs against.
 #
 # Mirrors the topology of aggregator-go's own docker-compose.yml, with two
 # deliberate differences: the aggregator runs from a pinned prebuilt image
 # instead of a local rocksdb build, and DEFAULT_REQUEST_TTL is short enough
 # that the service-assigned request deadline can be observed within a test.
 #
-# Bring it up with scripts/e2e-aggregator.sh, which creates the writable
+# Bring it up with scripts/integration-aggregator.sh, which creates the writable
 # genesis directories this file mounts and waits for consensus to produce a
 # reference time.
 
@@ -108,7 +108,7 @@ services:
       start_period: 5s
 
   aggregator:
-    image: ghcr.io/unicitynetwork/aggregator-go:${AGGREGATOR_IMAGE_TAG:-sha-0c7f70b}
+    image: ghcr.io/unicitynetwork/aggregator-go:${AGGREGATOR_IMAGE_TAG:-sha-ae08165}
     restart: on-failure
     ports:
       - "${AGGREGATOR_PORT:-3000}:3000"
@@ -122,8 +122,11 @@ services:
 
       MONGODB_URI: "mongodb://mongodb:27017/aggregator?replicaSet=rs0&directConnection=true"
       MONGODB_DATABASE: "aggregator"
-      MONGODB_CONNECT_TIMEOUT: "10s"
-      MONGODB_SERVER_SELECTION_TIMEOUT: "5s"
+      # Generous enough to ride out the replica-set election on a cold start.
+      # The aggregator creates its indexes during storage init and exits if that
+      # times out; the defaults give up while the fresh set is still electing.
+      MONGODB_CONNECT_TIMEOUT: "30s"
+      MONGODB_SERVER_SELECTION_TIMEOUT: "30s"
 
       REDIS_HOST: "redis"
       REDIS_PORT: "6379"

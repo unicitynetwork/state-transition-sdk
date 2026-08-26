@@ -136,36 +136,41 @@ Run the example flows (requires a reachable aggregator; URL is read from each ex
 npm run test:examples
 ```
 
-Run the end-to-end suite. It talks to a real aggregator — the wire formats it
-covers (certification data, the transaction encodings, the inclusion proof and
-the reference-time-bound leaf value) are shared with the service, so nothing but
-a real service can tell whether the two still agree.
-
-Bring a local one up first. `scripts/e2e-aggregator.sh` starts the stack in
-[`tests/e2e/docker`](./tests/e2e/docker) — a BFT root node, mongodb, redis and a
-pinned aggregator build — and waits until consensus is certifying rounds:
+Run the integration suite. It talks to a real aggregator, but owns the one it
+talks to: `scripts/integration-aggregator.sh` starts the stack in
+[`tests/integration/docker`](./tests/integration/docker) — a BFT root node,
+mongodb, redis and a pinned aggregator build — and waits until consensus is
+certifying. Nothing external is involved.
 
 ```bash
-npm run e2e:up
-eval "$(./scripts/e2e-aggregator.sh env)"   # AGGREGATOR_URL + the generated TRUST_BASE_PATH
-npm run test:e2e
-npm run e2e:down
+npm run integration:up
+npm run test:integration
+npm run integration:down
 ```
 
-The e2e suite is not part of CI — it needs a live aggregator — so run it locally
-before changing anything on the wire. `e2e:down` also deletes the generated
-genesis, so the next `e2e:up` starts from a clean chain. Without `AGGREGATOR_URL` and `TRUST_BASE_PATH` the suite falls
-back to `http://localhost:3000` and the checked-in trust base, which only match
-an aggregator someone else started.
+The suite finds the stack on its own: it defaults to `http://localhost:3000` and
+to the trust base the root node generates on first start, so no environment
+setup is needed. `integration:down` deletes that genesis, so the next
+`integration:up` starts from a clean chain.
 
-To run it against another network, point it at that endpoint and supply the matching trust base:
+This is where the wire formats get checked. Certification data, the transaction
+encodings, the inclusion proof and the reference-time-bound leaf value are all
+shared with the service, and the fake aggregator in `tests/functional` derives
+them with the very code under test — only a real service can tell whether the
+two still agree. Run it before changing anything on the wire.
+
+Run the end-to-end suite against a deployed network. Unlike the integration
+suite this one has no service of its own, so point it at an endpoint and supply
+the matching trust base:
 
 ```bash
-AGGREGATOR_URL=https://gateway.example.unicity.network \
+AGGREGATOR_URL=https://gateway.testnet2.unicity.network \
 TRUST_BASE_PATH=/path/to/trust-base.json \
 AGGREGATOR_API_KEY=<key, if the endpoint requires one> \
 npm run test:e2e
 ```
+
+Neither suite runs in CI — one needs a docker stack, the other a live network.
 
 ### Linting
 

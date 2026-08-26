@@ -1,4 +1,4 @@
-import { createE2EContext } from './E2EConfig.js';
+import { createIntegrationContext } from './IntegrationConfig.js';
 import { CertificationData } from '../../src/api/CertificationData.js';
 import { CertificationStatus } from '../../src/api/CertificationResponse.js';
 import { InclusionProof } from '../../src/api/InclusionProof.js';
@@ -18,11 +18,12 @@ import { createUnicityCertificateVerifier } from '../utils/UnicityCertificateVer
  *
  * The functional suite covers the same ground against
  * {@link ../functional/TestAggregatorClient.js}, which derives leaf values with
- * the very code under test; only these tests can tell whether the SDK and the
- * service agree. The stack is brought up by scripts/e2e-aggregator.sh.
+ * the very code under test; only a real service can tell whether the SDK and
+ * the aggregator still agree. The stack is brought up by
+ * scripts/integration-aggregator.sh.
  */
-describe('E2E request deadline', () => {
-  const { aggregatorClient, client, trustBase } = createE2EContext();
+describe('Integration request deadline', () => {
+  const { aggregatorClient, client, trustBase } = createIntegrationContext();
   const predicateVerifier = PredicateVerifierService.create();
   const unicityCertificateVerifier = createUnicityCertificateVerifier();
 
