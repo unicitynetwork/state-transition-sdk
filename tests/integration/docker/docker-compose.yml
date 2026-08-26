@@ -5,9 +5,10 @@
 # instead of a local rocksdb build, and DEFAULT_REQUEST_TTL is short enough
 # that the service-assigned request deadline can be observed within a test.
 #
-# Bring it up with scripts/integration-aggregator.sh, which creates the writable
-# genesis directories this file mounts and waits for consensus to produce a
-# reference time.
+# Testcontainers drives it, from tests/integration/support/aggregatorStack.mjs:
+# that creates the writable genesis directories this file mounts, publishes the
+# aggregator on an ephemeral port, and waits for consensus to produce a
+# reference time before any test runs.
 
 x-bft: &bft-base
   platform: linux/amd64

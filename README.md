@@ -199,27 +199,22 @@ Run the example flows (requires a reachable aggregator; URL is read from each ex
 npm run test:examples
 ```
 
-Run the integration suite. It talks to a real aggregator, but owns the one it
-talks to: Testcontainers starts the stack in
-[`tests/integration/docker`](./tests/integration/docker) — a BFT root node,
-mongodb, redis and a pinned aggregator build — waits for consensus to certify a
-round, and tears it down afterwards. Nothing external is involved, and no setup
-is needed:
+Run the integration suite. It owns the aggregator it talks to: Testcontainers
+starts the stack in [`tests/integration/docker`](./tests/integration/docker) — a
+BFT root node, mongodb, redis and a pinned aggregator build — waits for
+consensus to certify a round, and tears it down when the run ends. Nothing
+external is involved and there is nothing to set up:
 
 ```bash
 npm run test:integration
 ```
 
-That pays a cold start of roughly a minute per run. While iterating, start the
-stack once and point the suite at it — it reuses a stack it did not start, and
-leaves it running:
-
-```bash
-npm run integration:up
-eval "$(./scripts/integration-aggregator.sh env)"
-npm run test:integration   # ~20s
-npm run integration:down
-```
+The chain starts empty every run, and the aggregator is published on an
+ephemeral port, so concurrent runs and CI jobs cannot collide. There is
+deliberately no way to point this suite at an aggregator it did not start — a
+run that could be aimed elsewhere would not be exercising the compose file it
+exists to test. Pointing the SDK at a service someone else is running is what
+the e2e suite below is for.
 
 This is where the wire formats get checked. Certification data, the transaction
 encodings, the inclusion proof and the reference-time-bound leaf value are all

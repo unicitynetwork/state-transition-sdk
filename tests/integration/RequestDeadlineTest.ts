@@ -19,8 +19,8 @@ import { createUnicityCertificateVerifier } from '../utils/UnicityCertificateVer
  * The functional suite covers the same ground against
  * {@link ../functional/TestAggregatorClient.js}, which derives leaf values with
  * the very code under test; only a real service can tell whether the SDK and
- * the aggregator still agree. The stack is brought up by
- * scripts/integration-aggregator.sh.
+ * the aggregator still agree. Testcontainers starts the stack for the run; see
+ * ./support/aggregatorStack.mjs.
  */
 describe('Integration request deadline', () => {
   const { aggregatorClient, client, trustBase } = createIntegrationContext();

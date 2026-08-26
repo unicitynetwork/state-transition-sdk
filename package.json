@@ -10,8 +10,6 @@
   "scripts": {
     "build": "tsc --project tsconfig.build.json",
     "build:check": "tsc --noEmit",
-    "integration:up": "./scripts/integration-aggregator.sh up",
-    "integration:down": "./scripts/integration-aggregator.sh down",
     "lint": "eslint \"src/**/*\" \"tests/**/*\"",
     "lint:fix": "eslint \"src/**/*\" \"tests/**/*\" --fix",
     "test": "npm run-script test:unit",

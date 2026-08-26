@@ -65,26 +65,14 @@ async function waitForCertification(url) {
 /**
  * Start the aggregator stack the integration suite runs against.
  *
- * A caller that has already started one — `npm run integration:up`, or a shared
- * service in some other environment — sets AGGREGATOR_URL, and this reuses it
- * rather than starting a second. That keeps the edit-run loop fast: the stack
- * takes the better part of a minute to reach its first certified round, and
- * there is no reason to pay that per run while iterating on a test.
+ * The suite always runs against a stack it started itself, on a chain that
+ * begins empty. Pointing it at a service someone else is running is what the
+ * e2e suite is for; letting it happen here would mean a green integration run
+ * proved nothing about the compose file it is supposed to be exercising.
  *
  * @returns {Promise<{stop: () => Promise<void>, trustBasePath: string, url: string}>} The running stack.
  */
 export async function startAggregatorStack() {
-  if (process.env.AGGREGATOR_URL) {
-    const url = process.env.AGGREGATOR_URL;
-    await waitForCertification(url);
-
-    return {
-      stop: () => Promise.resolve(),
-      trustBasePath: process.env.TRUST_BASE_PATH ?? TRUST_BASE_PATH,
-      url,
-    };
-  }
-
   // Genesis is bind-mounted and survives a container teardown. Reusing it
   // against the fresh mongodb and redis volumes below would pair a chain that
   // remembers nothing with a root node that remembers everything.
