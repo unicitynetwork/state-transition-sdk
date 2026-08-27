@@ -23,6 +23,26 @@ npm install @unicitylabs/state-transition-sdk
 
 ## Upgrading to 3.0
 
+### 3.0.1 changes API that 3.0.0 shipped
+
+3.0.1 is a corrective release: 3.0.0 was published but not adopted, and rather
+than carry its rough edges forward the release fixes them in place. It is not a
+drop-in patch.
+
+| Change | What breaks |
+|---|---|
+| `TransferTransaction.fromCBOR(bytes, token)` | now `(bytes, sourceStateHash, lockScript)`, and synchronous |
+| `CertifiedTransferTransaction.fromCBOR(bytes, token)` | the same |
+| `TransferTransaction.expiresAtFromCBOR` | removed; decode the transaction and read `expiresAt` |
+| `new InclusionProofResponse(...)` | replaced by `InclusionProofResponse.certified` / `.notCertified` |
+| `new InclusionProof(...)` | every field is now required; a proof describes a certified leaf |
+| `InclusionProof.getCertificationData` / `getReferenceTime` | no longer nullable |
+| `InclusionProofVerificationStatus` | `MISSING_CERTIFICATION_DATA`, `MISSING_REFERENCE_TIME`, `INCOMPLETE_INCLUSION_PROOF` and `INCLUSION_CERTIFICATE_MISSING` removed — none can occur now that a proof is complete by construction |
+
+The wire formats are unchanged from 3.0.0, so tokens and proofs move between the
+two versions; only the API moved.
+
+
 3.0 changes the formats the SDK shares with the Unicity Service, so it is not
 interoperable with 2.x in either direction. There is no migration path for
 tokens already in circulation.

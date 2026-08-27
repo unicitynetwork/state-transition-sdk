@@ -1,6 +1,6 @@
 {
   "name": "@unicitylabs/state-transition-sdk",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "Generic State Transition Flow engine for value-carrier agents",
   "type": "module",
   "exports": {
