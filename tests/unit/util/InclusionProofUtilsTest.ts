@@ -1,31 +1,25 @@
 import { getEventListeners } from 'node:events';
 
-import { CertificationData } from '../../../src/api/CertificationData.js';
+import { UnicityCertificate } from '../../../src/api/bft/UnicityCertificate.js';
 import { CertificationResponse } from '../../../src/api/CertificationResponse.js';
 import { IAggregatorClient } from '../../../src/api/IAggregatorClient.js';
-import { InclusionCertificate } from '../../../src/api/InclusionCertificate.js';
 import { InclusionProof } from '../../../src/api/InclusionProof.js';
 import { InclusionProofResponse } from '../../../src/api/InclusionProofResponse.js';
 import { IRequestOptions } from '../../../src/api/IRequestOptions.js';
 import { JsonRpcNetworkError } from '../../../src/api/json-rpc/JsonRpcNetworkError.js';
-import { calculateLeafValue } from '../../../src/api/LeafValue.js';
 import { NetworkId } from '../../../src/api/NetworkId.js';
 import { StateId } from '../../../src/api/StateId.js';
 import { DataHash } from '../../../src/crypto/hash/DataHash.js';
-import { DataHasherFactory } from '../../../src/crypto/hash/DataHasherFactory.js';
 import { HashAlgorithm } from '../../../src/crypto/hash/HashAlgorithm.js';
-import { NodeDataHasher } from '../../../src/crypto/hash/NodeDataHasher.js';
 import { SigningService } from '../../../src/crypto/secp256k1/SigningService.js';
 import { SignaturePredicate } from '../../../src/predicate/builtin/SignaturePredicate.js';
 import { PredicateVerifierService } from '../../../src/predicate/verification/PredicateVerifierService.js';
-import { SparseMerkleTree } from '../../../src/smt/radix/SparseMerkleTree.js';
 import { StateTransitionClient } from '../../../src/StateTransitionClient.js';
 import { MintTransaction } from '../../../src/transaction/MintTransaction.js';
 import { TokenSalt } from '../../../src/transaction/TokenSalt.js';
 import { TokenType } from '../../../src/transaction/TokenType.js';
 import { SleepError, waitInclusionProof } from '../../../src/util/InclusionProofUtils.js';
 import { expiresAt } from '../../utils/ExpiresAt.js';
-import { REFERENCE_TIME } from '../../utils/ReferenceTime.js';
 import { createRootTrustBase } from '../../utils/RootTrustBaseFixture.js';
 import { createUnicityCertificate } from '../../utils/UnicityCertificateFixture.js';
 import { createUnicityCertificateVerifier } from '../../utils/UnicityCertificateVerifierFixture.js';
@@ -76,8 +70,7 @@ describe('waitInclusionProof', () => {
   const unicityCertificateVerifier = createUnicityCertificateVerifier();
 
   let transaction: MintTransaction;
-  let pendingProof: InclusionProof;
-  let certifiedProof: InclusionProof;
+  let pendingCertificate: UnicityCertificate;
 
   beforeAll(async () => {
     transaction = await MintTransaction.create(NetworkId.LOCAL, SignaturePredicate.create(signingService.publicKey), {
@@ -85,26 +78,11 @@ describe('waitInclusionProof', () => {
       salt: TokenSalt.generate(),
       tokenType: TokenType.generate(),
     });
-    // A proof with all three leaf fields absent is what the aggregator returns
-    // for a state it has not certified yet, i.e. "keep polling".
-    pendingProof = new InclusionProof(
-      null,
-      null,
-      null,
-      await createUnicityCertificate(new DataHash(HashAlgorithm.SHA256, new Uint8Array(32)), signingService),
-    );
-
-    // A complete leaf, for the tests below that strip one field back out of it.
-    const smt = new SparseMerkleTree(new DataHasherFactory(HashAlgorithm.SHA256, NodeDataHasher));
-    const stateId = await StateId.fromTransaction(transaction);
-    const certificationData = await CertificationData.fromMintTransaction(transaction);
-    await smt.addLeaf(stateId.data, (await calculateLeafValue(certificationData.transactionHash, REFERENCE_TIME)).data);
-    const root = await smt.calculateRoot();
-    certifiedProof = new InclusionProof(
-      certificationData,
-      REFERENCE_TIME,
-      InclusionCertificate.create(root, stateId.data),
-      await createUnicityCertificate(root.hash, signingService),
+    // A response with no proof is what the aggregator returns for a state it has not certified
+    // yet, i.e. "keep polling".
+    pendingCertificate = await createUnicityCertificate(
+      new DataHash(HashAlgorithm.SHA256, new Uint8Array(32)),
+      signingService,
     );
   });
 
@@ -121,43 +99,6 @@ describe('waitInclusionProof', () => {
 
   const notFound = (): Promise<InclusionProofResponse> =>
     Promise.reject(new JsonRpcNetworkError(404, 'Inclusion proof not found'));
-
-  // A proof that is present but structurally impossible used to be answered
-  // with "keep polling": the wait then ran to its own deadline and reported a
-  // timeout, naming neither the stripped field nor the service that stripped
-  // it.
-  it.each([
-    [
-      'certification data',
-      (proof: InclusionProof): InclusionProof =>
-        new InclusionProof(null, proof.referenceTime, proof.inclusionCertificate, proof.unicityCertificate),
-      'MISSING_CERTIFICATION_DATA',
-    ],
-    [
-      'the leaf creation time',
-      (proof: InclusionProof): InclusionProof =>
-        new InclusionProof(proof.certificationData, null, proof.inclusionCertificate, proof.unicityCertificate),
-      'MISSING_REFERENCE_TIME',
-    ],
-    [
-      'the inclusion certificate',
-      (proof: InclusionProof): InclusionProof =>
-        new InclusionProof(proof.certificationData, proof.referenceTime, null, proof.unicityCertificate),
-      'INCOMPLETE_INCLUSION_PROOF',
-    ],
-  ])(
-    'should fail rather than poll when a proof is served without %s',
-    async (_field, strip, status) => {
-      const client = new StubAggregatorClient(() =>
-        Promise.resolve(new InclusionProofResponse(1n, strip(certifiedProof))),
-      );
-
-      await expect(wait(client, AbortSignal.timeout(2000))).rejects.toThrow(
-        `Invalid inclusion proof status: ${status}`,
-      );
-    },
-    10000,
-  );
 
   it('should reject when the deadline fires while a request is in flight', async () => {
     const started = createDeferred<void>();
@@ -326,7 +267,7 @@ describe('waitInclusionProof', () => {
       if (call >= 3) {
         controller.abort(new Error('deadline reached'));
       }
-      return Promise.resolve(new InclusionProofResponse(1n, pendingProof));
+      return Promise.resolve(InclusionProofResponse.notCertified(1n, pendingCertificate));
     });
 
     await expect(wait(client, controller.signal, 1)).rejects.toThrow(SleepError);

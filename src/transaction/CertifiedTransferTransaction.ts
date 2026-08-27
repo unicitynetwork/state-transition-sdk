@@ -8,7 +8,6 @@ import { DataHash } from '../crypto/hash/DataHash.js';
 import { EncodedPredicate } from '../predicate/EncodedPredicate.js';
 import { PredicateVerifierService } from '../predicate/verification/PredicateVerifierService.js';
 import { CborDeserializer } from '../serialization/cbor/CborDeserializer.js';
-import { CborError } from '../serialization/cbor/CborError.js';
 import { CborSerializer } from '../serialization/cbor/CborSerializer.js';
 import { dedent } from '../util/StringUtils.js';
 import { VerificationError } from '../verification/VerificationError.js';
@@ -63,8 +62,7 @@ export class CertifiedTransferTransaction implements ITransaction {
    * proof is the authenticated source for it.
    */
   public get referenceTime(): bigint {
-    // Non-null by construction: every factory below rejects a proof without one.
-    return this.inclusionProof.referenceTime as bigint;
+    return this.inclusionProof.referenceTime;
   }
 
   /**
@@ -96,12 +94,6 @@ export class CertifiedTransferTransaction implements ITransaction {
   ): CertifiedTransferTransaction {
     const data = CborDeserializer.decodeArray(bytes, 2);
     const proof = InclusionProof.fromCBOR(data[1]);
-    // A certified transaction is one bound to a leaf. A proof that reports no
-    // leaf cannot certify anything, and decoding it into one would hand every
-    // later verifier a transaction with no reference time.
-    if (proof.referenceTime == null) {
-      throw new CborError('Certified transfer transaction carries an inclusion proof with no certified leaf.');
-    }
     return new CertifiedTransferTransaction(TransferTransaction.fromCBOR(data[0], sourceStateHash, lockScript), proof);
   }
 

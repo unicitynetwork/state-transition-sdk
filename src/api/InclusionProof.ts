@@ -11,16 +11,14 @@ import { dedent } from '../util/StringUtils.js';
  */
 export class InclusionProof {
   public static readonly CBOR_TAG = 39033n;
-  private static readonly VERSION = 1n;
+  public static readonly VERSION = 1n;
 
   /**
    * Constructs an InclusionProof instance.
    *
-   * `certificationData`, `referenceTime` and `inclusionCertificate` describe a
-   * leaf and belong together: all three are present once the request has been
-   * included in a certified round, and all three are absent while it is still
-   * pending. {@link InclusionProof.fromCBOR} rejects any other combination, so
-   * decoded proofs always satisfy that invariant.
+   * An InclusionProof describes a certified leaf, so every field is present. The aggregator's
+   * answer for a state it has not certified yet is not an InclusionProof at all — see
+   * {@link InclusionProofResponse}, which is the type that can express it.
    *
    * @param certificationData Certification data.
    * @param referenceTime Reference time of the round the leaf was created in, in Unix seconds.
@@ -28,9 +26,9 @@ export class InclusionProof {
    * @param unicityCertificate Unicity certificate.
    */
   public constructor(
-    public readonly certificationData: CertificationData | null,
-    public readonly referenceTime: bigint | null,
-    public readonly inclusionCertificate: InclusionCertificate | null,
+    public readonly certificationData: CertificationData,
+    public readonly referenceTime: bigint,
+    public readonly inclusionCertificate: InclusionCertificate,
     public readonly unicityCertificate: UnicityCertificate,
   ) {}
 
@@ -43,8 +41,14 @@ export class InclusionProof {
 
   /**
    * Decodes an InclusionProof from CBOR bytes.
+   *
+   * The bytes must describe a certified leaf. The same wire form can also say that no leaf is
+   * certified yet, but that is not an InclusionProof — {@link InclusionProofResponse} is the type
+   * that carries it, and it decodes that case itself.
+   *
    * @param bytes The CBOR-encoded bytes.
    * @returns An InclusionProof instance.
+   * @throws {CborError} On a wrong tag, an unsupported version, or bytes describing no leaf.
    */
   public static fromCBOR(bytes: Uint8Array): InclusionProof {
     const tag = CborDeserializer.decodeTag(bytes);
@@ -60,18 +64,11 @@ export class InclusionProof {
 
     const certificationData = CborDeserializer.decodeNullable(data[1], CertificationData.fromCBOR);
     const referenceTime = CborDeserializer.decodeNullable(data[2], CborDeserializer.decodeUnsignedInteger);
-    const inclusionCertificate = CborDeserializer.decodeNullable(data[3], (bytes) =>
-      InclusionCertificate.decode(CborDeserializer.decodeByteString(bytes)),
+    const inclusionCertificate = CborDeserializer.decodeNullable(data[3], (certificate) =>
+      InclusionCertificate.decode(CborDeserializer.decodeByteString(certificate)),
     );
-
-    // A proof either establishes a leaf or reports that there is none yet. A
-    // partially present proof is neither, and would let a caller reach a leaf
-    // check with a reference time nothing certified.
-    const present = [certificationData, referenceTime, inclusionCertificate].filter((field) => field != null).length;
-    if (present !== 0 && present !== 3) {
-      throw new CborError(
-        'InclusionProof must carry certification data, reference time and inclusion certificate together, or none of them.',
-      );
+    if (certificationData == null || referenceTime == null || inclusionCertificate == null) {
+      throw new CborError('Expected a certified leaf, but the inclusion proof describes none.');
     }
 
     return new InclusionProof(
@@ -91,13 +88,9 @@ export class InclusionProof {
       InclusionProof.CBOR_TAG,
       CborSerializer.encodeArray(
         CborSerializer.encodeUnsignedInteger(this.version),
-        CborSerializer.encodeNullable(this.certificationData, (certificationData) => certificationData.toCBOR()),
-        CborSerializer.encodeNullable(this.referenceTime, (referenceTime) =>
-          CborSerializer.encodeUnsignedInteger(referenceTime),
-        ),
-        CborSerializer.encodeNullable(this.inclusionCertificate, (inclusionCertificate) =>
-          CborSerializer.encodeByteString(inclusionCertificate.encode()),
-        ),
+        this.certificationData.toCBOR(),
+        CborSerializer.encodeUnsignedInteger(this.referenceTime),
+        CborSerializer.encodeByteString(this.inclusionCertificate.encode()),
         this.unicityCertificate.toCBOR(),
       ),
     );
@@ -110,9 +103,9 @@ export class InclusionProof {
   public toString(): string {
     return dedent`
       Inclusion Proof
-        Reference Time: ${this.referenceTime?.toString() ?? 'null'}
-        ${this.inclusionCertificate?.toString()}
-        ${this.certificationData?.toString()}
+        Reference Time: ${this.referenceTime.toString()}
+        ${this.inclusionCertificate.toString()}
+        ${this.certificationData.toString()}
         ${this.unicityCertificate.toString()}`;
   }
 }
