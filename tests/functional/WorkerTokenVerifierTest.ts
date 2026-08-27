@@ -173,10 +173,8 @@ describe('WorkerTokenVerifier', () => {
     verifier.dispose();
   }, 30000);
 
-  // The deadline used to travel as a fourth element beside the transfer bytes,
-  // outside the bytes whose SHA-256 is the transaction hash, and the decoder
-  // never compared the two. It is recovered from those bytes now, so there is
-  // no second copy to disagree with them.
+  // The deadline used to travel as a fourth element beside the transfer bytes, outside the bytes
+  // whose hash authenticates it. It is decoded from those bytes now.
   it('sends the transfer bytes and their chain context, with no separate deadline', async () => {
     const deadline = expiresAt();
     const deadlineContext = createContext();
@@ -192,9 +190,15 @@ describe('WorkerTokenVerifier', () => {
 
     const elements = CborDeserializer.decodeArray(payload!);
     expect(elements).toHaveLength(3);
-    // The deadline the worker verifies against comes out of element 0, the
-    // transfer bytes the transaction hash commits to.
-    expect(TransferTransaction.expiresAtFromCBOR(CborDeserializer.decodeArray(elements[0], 2)[0])).toEqual(deadline);
+    // The deadline the worker verifies against comes out of element 0, the transfer bytes.
+    const certified = CborDeserializer.decodeArray(elements[0], 2);
+    expect(
+      TransferTransaction.fromCBORWithSource(
+        certified[0],
+        deadlineToken.transactions[0].sourceStateHash,
+        deadlineToken.transactions[0].lockScript,
+      ).expiresAt,
+    ).toEqual(deadline);
   }, 30000);
 
   it('splits transfers across the pool and reuses it over verifications', async () => {

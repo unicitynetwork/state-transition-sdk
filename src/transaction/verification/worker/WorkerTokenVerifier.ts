@@ -6,8 +6,6 @@ import { RootTrustBase } from '../../../api/bft/RootTrustBase.js';
 import { UnicityCertificateVerifier } from '../../../api/bft/verification/UnicityCertificateVerifier.js';
 import { InclusionProof } from '../../../api/InclusionProof.js';
 import { DataHash } from '../../../crypto/hash/DataHash.js';
-import { DataHasher } from '../../../crypto/hash/DataHasher.js';
-import { HashAlgorithm } from '../../../crypto/hash/HashAlgorithm.js';
 import { EncodedPredicate } from '../../../predicate/EncodedPredicate.js';
 import { PredicateVerifierService } from '../../../predicate/verification/PredicateVerifierService.js';
 import { CborDeserializer } from '../../../serialization/cbor/CborDeserializer.js';
@@ -137,10 +135,9 @@ function toValidatedBatchResults(
  */
 class WorkerTransferTransaction {
   private constructor(
-    private readonly bytes: Uint8Array,
+    private readonly transaction: TransferTransaction,
     public readonly sourceStateHash: DataHash,
     public readonly lockScript: EncodedPredicate,
-    public readonly expiresAt: bigint | null,
     public readonly inclusionProof: InclusionProof,
   ) {}
 
@@ -153,15 +150,13 @@ class WorkerTransferTransaction {
   public static fromCBOR(bytes: Uint8Array): WorkerTransferTransaction {
     const data = CborDeserializer.decodeArray(bytes, 3);
     const certified = CborDeserializer.decodeArray(data[0], 2);
+    const sourceStateHash = DataHash.fromImprint(CborDeserializer.decodeByteString(data[1]));
+    const lockScript = EncodedPredicate.fromCBOR(data[2]);
 
     return new WorkerTransferTransaction(
-      certified[0],
-      DataHash.fromImprint(CborDeserializer.decodeByteString(data[1])),
-      EncodedPredicate.fromCBOR(data[2]),
-      // Recovered from the transfer bytes the transaction hash commits to, not
-      // carried alongside them: a copy outside those bytes is unauthenticated,
-      // and nothing downstream could tell the two apart if they disagreed.
-      TransferTransaction.expiresAtFromCBOR(certified[0]),
+      TransferTransaction.fromCBORWithSource(certified[0], sourceStateHash, lockScript),
+      sourceStateHash,
+      lockScript,
       InclusionProof.fromCBOR(certified[1]),
     );
   }
@@ -187,7 +182,7 @@ class WorkerTransferTransaction {
    * @returns {Promise<DataHash>} Transaction hash.
    */
   public calculateTransactionHash(): Promise<DataHash> {
-    return new DataHasher(HashAlgorithm.SHA256).update(this.bytes).digest();
+    return this.transaction.calculateTransactionHash();
   }
 
   /**
@@ -210,7 +205,7 @@ class WorkerTransferTransaction {
       unicityCertificateVerifier,
       this.inclusionProof,
       await this.calculateTransactionHash(),
-      this.expiresAt,
+      this.transaction.expiresAt,
       this.lockScript,
       this.sourceStateHash,
     );

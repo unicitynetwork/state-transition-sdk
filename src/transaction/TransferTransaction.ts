@@ -88,35 +88,6 @@ export class TransferTransaction implements ITransaction {
   }
 
   /**
-   * Read the request deadline out of encoded transfer bytes.
-   *
-   * A full decode needs the token the transfer belongs to, for the source state
-   * and lock script it derives from the chain. A consumer that holds only the
-   * transfer bytes — the worker wire format below is the one in this SDK — can
-   * still recover the deadline from them, and must, because these are the bytes
-   * the transaction hash commits to. Being told the deadline out of band
-   * instead leaves the value unauthenticated.
-   *
-   * @param {Uint8Array} bytes Encoded transfer transaction.
-   * @returns {bigint|null} Exclusive request deadline in Unix seconds, or `null` when the service assigned one.
-   * @throws {CborError} On wrong tag or unsupported version.
-   */
-  public static expiresAtFromCBOR(bytes: Uint8Array): bigint | null {
-    const tag = CborDeserializer.decodeTag(bytes);
-    if (tag.tag !== TransferTransaction.CBOR_TAG) {
-      throw new CborError(`Invalid CBOR tag for TransferTransaction: ${tag.tag}`);
-    }
-
-    const data = CborDeserializer.decodeArray(tag.data, TransferTransaction.FIELD_COUNT);
-    const version = CborDeserializer.decodeUnsignedInteger(data[0]);
-    if (version !== TransferTransaction.VERSION) {
-      throw new CborError(`Unsupported TransferTransaction version: ${version}`);
-    }
-
-    return CborDeserializer.decodeNullable(data[4], CborDeserializer.decodeUnsignedInteger);
-  }
-
-  /**
    * Create TransferTransaction from CBOR bytes.
    *
    * @param {Uint8Array} bytes CBOR bytes.
@@ -140,6 +111,45 @@ export class TransferTransaction implements ITransaction {
       data: CborDeserializer.decodeNullable(data[3], CborDeserializer.decodeByteString),
       expiresAt: CborDeserializer.decodeNullable(data[4], CborDeserializer.decodeUnsignedInteger),
     });
+  }
+
+  /**
+   * Create TransferTransaction from CBOR bytes and an explicitly supplied source.
+   *
+   * A full decode needs the state and lock script the transfer spends, which
+   * {@link TransferTransaction.fromCBOR} reads off the token. A caller that already holds them —
+   * having carried them alongside the bytes — supplies them here instead of reconstructing a token.
+   *
+   * @param {Uint8Array} bytes CBOR bytes.
+   * @param {DataHash} sourceStateHash Hash of the state the transaction spends.
+   * @param {EncodedPredicate} lockScript Lock script the transaction unlocks.
+   * @returns {TransferTransaction} Decoded transaction.
+   * @throws {CborError} On wrong tag or unsupported version.
+   */
+  public static fromCBORWithSource(
+    bytes: Uint8Array,
+    sourceStateHash: DataHash,
+    lockScript: EncodedPredicate,
+  ): TransferTransaction {
+    const tag = CborDeserializer.decodeTag(bytes);
+    if (tag.tag !== TransferTransaction.CBOR_TAG) {
+      throw new CborError(`Invalid CBOR tag for TransferTransaction: ${tag.tag}`);
+    }
+
+    const data = CborDeserializer.decodeArray(tag.data, TransferTransaction.FIELD_COUNT);
+    const version = CborDeserializer.decodeUnsignedInteger(data[0]);
+    if (version !== TransferTransaction.VERSION) {
+      throw new CborError(`Unsupported TransferTransaction version: ${version}`);
+    }
+
+    return new TransferTransaction(
+      sourceStateHash,
+      lockScript,
+      EncodedPredicate.fromCBOR(data[1]),
+      validateExpiresAt(CborDeserializer.decodeNullable(data[4], CborDeserializer.decodeUnsignedInteger)),
+      StateMask.fromCBOR(data[2]),
+      CborDeserializer.decodeNullable(data[3], CborDeserializer.decodeByteString),
+    );
   }
 
   /**
