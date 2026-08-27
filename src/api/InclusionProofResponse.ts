@@ -1,6 +1,9 @@
 import { UnicityCertificate } from './bft/UnicityCertificate.js';
-import { decodeInclusionProofOrAbsence, encodeNoCertifiedLeaf, InclusionProof } from './InclusionProof.js';
+import { CertificationData } from './CertificationData.js';
+import { InclusionCertificate } from './InclusionCertificate.js';
+import { InclusionProof } from './InclusionProof.js';
 import { CborDeserializer } from '../serialization/cbor/CborDeserializer.js';
+import { CborError } from '../serialization/cbor/CborError.js';
 import { CborSerializer } from '../serialization/cbor/CborSerializer.js';
 
 /**
@@ -40,12 +43,47 @@ export class InclusionProofResponse {
    */
   public static fromCBOR(bytes: Uint8Array): InclusionProofResponse {
     const data = CborDeserializer.decodeArray(bytes, 2);
-    const { inclusionProof, unicityCertificate } = decodeInclusionProofOrAbsence(data[1]);
     const blockNumber = CborDeserializer.decodeUnsignedInteger(data[0]);
 
-    return inclusionProof == null
-      ? InclusionProofResponse.notCertified(blockNumber, unicityCertificate)
-      : InclusionProofResponse.certified(blockNumber, inclusionProof);
+    const tag = CborDeserializer.decodeTag(data[1]);
+    if (tag.tag !== InclusionProof.CBOR_TAG) {
+      throw new CborError(`Invalid CBOR tag for InclusionProof: ${tag.tag}`);
+    }
+    const proof = CborDeserializer.decodeArray(tag.data, 5);
+    const version = CborDeserializer.decodeUnsignedInteger(proof[0]);
+    if (version !== InclusionProof.VERSION) {
+      throw new CborError(`Unsupported InclusionProof version: ${version}`);
+    }
+
+    const certificationData = CborDeserializer.decodeNullable(proof[1], CertificationData.fromCBOR);
+    const referenceTime = CborDeserializer.decodeNullable(proof[2], CborDeserializer.decodeUnsignedInteger);
+    const inclusionCertificate = CborDeserializer.decodeNullable(proof[3], (certificate) =>
+      InclusionCertificate.decode(CborDeserializer.decodeByteString(certificate)),
+    );
+    const unicityCertificate = UnicityCertificate.fromCBOR(proof[4]);
+
+    // The three leaf fields travel together: all present once the request has been included in a
+    // certified round, all absent while it is still pending. Anything in between is a protocol
+    // violation, and rejecting it here is what lets InclusionProof require all three.
+    const present = [certificationData, referenceTime, inclusionCertificate].filter((field) => field != null).length;
+    if (present === 0) {
+      return InclusionProofResponse.notCertified(blockNumber, unicityCertificate);
+    }
+    if (present !== 3) {
+      throw new CborError(
+        'InclusionProof must carry certification data, reference time and inclusion certificate together, or none of them.',
+      );
+    }
+
+    return InclusionProofResponse.certified(
+      blockNumber,
+      new InclusionProof(
+        certificationData as CertificationData,
+        referenceTime as bigint,
+        inclusionCertificate as InclusionCertificate,
+        unicityCertificate,
+      ),
+    );
   }
 
   /**
@@ -67,7 +105,26 @@ export class InclusionProofResponse {
   public toCBOR(): Uint8Array {
     return CborSerializer.encodeArray(
       CborSerializer.encodeUnsignedInteger(this.blockNumber),
-      this.inclusionProof?.toCBOR() ?? encodeNoCertifiedLeaf(this.unicityCertificate),
+      this.inclusionProof?.toCBOR() ?? this.encodeNoCertifiedLeaf(),
+    );
+  }
+
+  /**
+   * Encode the wire form for a state with no certified leaf: the three leaf fields absent, the
+   * round's certificate still present.
+   *
+   * @returns {Uint8Array} CBOR bytes.
+   */
+  private encodeNoCertifiedLeaf(): Uint8Array {
+    return CborSerializer.encodeTag(
+      InclusionProof.CBOR_TAG,
+      CborSerializer.encodeArray(
+        CborSerializer.encodeUnsignedInteger(InclusionProof.VERSION),
+        CborSerializer.encodeNull(),
+        CborSerializer.encodeNull(),
+        CborSerializer.encodeNull(),
+        this.unicityCertificate.toCBOR(),
+      ),
     );
   }
 }

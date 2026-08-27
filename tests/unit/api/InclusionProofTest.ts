@@ -3,11 +3,8 @@ import { UnicityCertificate } from '../../../src/api/bft/UnicityCertificate.js';
 import { UnicityCertificateVerifier } from '../../../src/api/bft/verification/UnicityCertificateVerifier.js';
 import { CertificationData } from '../../../src/api/CertificationData.js';
 import { InclusionCertificate } from '../../../src/api/InclusionCertificate.js';
-import {
-  decodeInclusionProofOrAbsence,
-  encodeNoCertifiedLeaf,
-  InclusionProof,
-} from '../../../src/api/InclusionProof.js';
+import { InclusionProof } from '../../../src/api/InclusionProof.js';
+import { InclusionProofResponse } from '../../../src/api/InclusionProofResponse.js';
 import { calculateLeafValue } from '../../../src/api/LeafValue.js';
 import { NetworkId } from '../../../src/api/NetworkId.js';
 import { StateId } from '../../../src/api/StateId.js';
@@ -81,13 +78,15 @@ describe('InclusionProof', () => {
   });
 
   // The wire form also expresses "no leaf yet". That is not an InclusionProof — the response is
-  // the type that carries it, and asking for a proof anyway is an error rather than a null.
+  // the type that carries it, and asking for a proof from those bytes is an error, not a null.
   it('decodes the absent form as an absence, not as a proof', () => {
-    const encoded = encodeNoCertifiedLeaf(unicityCertificate);
+    const encoded = CborDeserializer.decodeArray(
+      InclusionProofResponse.notCertified(1n, unicityCertificate).toCBOR(),
+      2,
+    )[1];
 
-    expect(decodeInclusionProofOrAbsence(encoded).inclusionProof).toBeNull();
     expect(() => InclusionProof.fromCBOR(encoded)).toThrow(
-      'Expected a certified leaf, but the inclusion proof reports none.',
+      'Expected a certified leaf, but the inclusion proof describes none.',
     );
   });
 
@@ -117,7 +116,9 @@ describe('InclusionProof', () => {
         CborSerializer.encodeArray(complete[0], data, referenceTime, certificate, complete[4]),
       );
 
-      expect(() => decodeInclusionProofOrAbsence(encoded)).toThrow(
+      expect(() =>
+        InclusionProofResponse.fromCBOR(CborSerializer.encodeArray(CborSerializer.encodeUnsignedInteger(1n), encoded)),
+      ).toThrow(
         'InclusionProof must carry certification data, reference time and inclusion certificate together, or none of them.',
       );
     }

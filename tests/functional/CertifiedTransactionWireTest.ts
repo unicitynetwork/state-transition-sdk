@@ -86,7 +86,7 @@ describe('Certified transaction wire format', () => {
 
     expect(uncertified.inclusionProof).toBeNull();
     expect(() => InclusionProof.fromCBOR(CborDeserializer.decodeArray(uncertified.toCBOR(), 2)[1])).toThrow(
-      'Expected a certified leaf, but the inclusion proof reports none.',
+      'Expected a certified leaf, but the inclusion proof describes none.',
     );
     // ...and it survives the round trip as an absence rather than becoming a half-formed proof.
     expect(InclusionProofResponse.fromCBOR(uncertified.toCBOR()).inclusionProof).toBeNull();
