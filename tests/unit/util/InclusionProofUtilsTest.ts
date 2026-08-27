@@ -267,7 +267,7 @@ describe('waitInclusionProof', () => {
       if (call >= 3) {
         controller.abort(new Error('deadline reached'));
       }
-      return Promise.resolve(new InclusionProofResponse(1n, null, pendingCertificate));
+      return Promise.resolve(InclusionProofResponse.notCertified(1n, pendingCertificate));
     });
 
     await expect(wait(client, controller.signal, 1)).rejects.toThrow(SleepError);

@@ -12,34 +12,51 @@ import { CborSerializer } from '../serialization/cbor/CborSerializer.js';
  * leaf.
  */
 export class InclusionProofResponse {
-  /**
-   * Create inclusion proof response.
-   *
-   * @param blockNumber Block number the answer was served at.
-   * @param inclusionProof Certified leaf, or `null` when the state is not certified yet.
-   * @param unicityCertificate Certificate of the round the answer was served against.
-   */
-  public constructor(
+  private constructor(
     public readonly blockNumber: bigint,
     public readonly inclusionProof: InclusionProof | null,
     public readonly unicityCertificate: UnicityCertificate,
   ) {}
 
   /**
+   * The aggregator has certified this state.
+   *
+   * The round it was served against is the proof's own, so there is no second certificate to
+   * supply and none that could disagree with it.
+   *
+   * @param {bigint} blockNumber Block number the answer was served at.
+   * @param {InclusionProof} inclusionProof The certified leaf.
+   * @returns {InclusionProofResponse} The response.
+   */
+  public static certified(blockNumber: bigint, inclusionProof: InclusionProof): InclusionProofResponse {
+    return new InclusionProofResponse(blockNumber, inclusionProof, inclusionProof.unicityCertificate);
+  }
+
+  /**
    * Create response from CBOR bytes.
    *
-   * @param bytes CBOR bytes
-   * @return inclusion proof response
+   * @param {Uint8Array} bytes CBOR bytes.
+   * @returns {InclusionProofResponse} Inclusion proof response.
    */
   public static fromCBOR(bytes: Uint8Array): InclusionProofResponse {
     const data = CborDeserializer.decodeArray(bytes, 2);
     const { inclusionProof, unicityCertificate } = decodeInclusionProofOrAbsence(data[1]);
+    const blockNumber = CborDeserializer.decodeUnsignedInteger(data[0]);
 
-    return new InclusionProofResponse(
-      CborDeserializer.decodeUnsignedInteger(data[0]),
-      inclusionProof,
-      unicityCertificate,
-    );
+    return inclusionProof == null
+      ? InclusionProofResponse.notCertified(blockNumber, unicityCertificate)
+      : InclusionProofResponse.certified(blockNumber, inclusionProof);
+  }
+
+  /**
+   * The aggregator has not certified this state yet, so only the round is meaningful.
+   *
+   * @param {bigint} blockNumber Block number the answer was served at.
+   * @param {UnicityCertificate} unicityCertificate Certificate of the round the answer was served against.
+   * @returns {InclusionProofResponse} The response.
+   */
+  public static notCertified(blockNumber: bigint, unicityCertificate: UnicityCertificate): InclusionProofResponse {
+    return new InclusionProofResponse(blockNumber, null, unicityCertificate);
   }
 
   /**

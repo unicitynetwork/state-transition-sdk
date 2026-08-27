@@ -82,7 +82,7 @@ describe('Certified transaction wire format', () => {
   // A certified transaction can no longer be handed a proof that describes no leaf: the type
   // cannot express one. The absence lives on the response instead, and InclusionProof refuses it.
   it('cannot represent a certified transaction whose proof has no leaf', () => {
-    const uncertified = new InclusionProofResponse(1n, null, token.genesis.inclusionProof.unicityCertificate);
+    const uncertified = InclusionProofResponse.notCertified(1n, token.genesis.inclusionProof.unicityCertificate);
 
     expect(uncertified.inclusionProof).toBeNull();
     expect(() => InclusionProof.fromCBOR(CborDeserializer.decodeArray(uncertified.toCBOR(), 2)[1])).toThrow(

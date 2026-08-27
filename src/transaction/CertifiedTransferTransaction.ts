@@ -94,10 +94,7 @@ export class CertifiedTransferTransaction implements ITransaction {
   ): CertifiedTransferTransaction {
     const data = CborDeserializer.decodeArray(bytes, 2);
     const proof = InclusionProof.fromCBOR(data[1]);
-    return new CertifiedTransferTransaction(
-      TransferTransaction.fromCBOR(data[0], sourceStateHash, lockScript),
-      proof,
-    );
+    return new CertifiedTransferTransaction(TransferTransaction.fromCBOR(data[0], sourceStateHash, lockScript), proof);
   }
 
   /**

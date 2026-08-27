@@ -68,11 +68,11 @@ export class TestAggregatorClient implements IAggregatorClient {
     const record = this.requests.get(path);
 
     if (!record) {
-      return Promise.resolve(new InclusionProofResponse(1n, null, unicityCertificate));
+      return Promise.resolve(InclusionProofResponse.notCertified(1n, unicityCertificate));
     }
 
     return Promise.resolve(
-      new InclusionProofResponse(
+      InclusionProofResponse.certified(
         1n,
         new InclusionProof(
           record.certificationData,
@@ -80,7 +80,6 @@ export class TestAggregatorClient implements IAggregatorClient {
           InclusionCertificate.create(root, stateId.data),
           unicityCertificate,
         ),
-        unicityCertificate,
       ),
     );
   }
