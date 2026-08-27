@@ -90,35 +90,10 @@ export class TransferTransaction implements ITransaction {
   /**
    * Create TransferTransaction from CBOR bytes.
    *
-   * @param {Uint8Array} bytes CBOR bytes.
-   * @param {Token} token Token providing context for the transfer transaction.
-   * @returns {Promise<TransferTransaction>} Decoded transaction.
-   * @throws {CborError} On wrong tag or unsupported version.
-   */
-  public static fromCBOR(bytes: Uint8Array, token: Token): Promise<TransferTransaction> {
-    const tag = CborDeserializer.decodeTag(bytes);
-    if (tag.tag !== TransferTransaction.CBOR_TAG) {
-      throw new CborError(`Invalid CBOR tag for TransferTransaction: ${tag.tag}`);
-    }
-
-    const data = CborDeserializer.decodeArray(tag.data, TransferTransaction.FIELD_COUNT);
-    const version = CborDeserializer.decodeUnsignedInteger(data[0]);
-    if (version !== TransferTransaction.VERSION) {
-      throw new CborError(`Unsupported TransferTransaction version: ${version}`);
-    }
-
-    return TransferTransaction.create(token, EncodedPredicate.fromCBOR(data[1]), StateMask.fromCBOR(data[2]), {
-      data: CborDeserializer.decodeNullable(data[3], CborDeserializer.decodeByteString),
-      expiresAt: CborDeserializer.decodeNullable(data[4], CborDeserializer.decodeUnsignedInteger),
-    });
-  }
-
-  /**
-   * Create TransferTransaction from CBOR bytes and an explicitly supplied source.
-   *
-   * A full decode needs the state and lock script the transfer spends, which
-   * {@link TransferTransaction.fromCBOR} reads off the token. A caller that already holds them —
-   * having carried them alongside the bytes — supplies them here instead of reconstructing a token.
+   * The state being spent and the lock script over it are chain context rather than part of the
+   * encoded transfer, so the caller supplies them. Both are checked against the certification data
+   * during verification, so a wrong value fails there rather than yielding a transaction that
+   * looks valid.
    *
    * @param {Uint8Array} bytes CBOR bytes.
    * @param {DataHash} sourceStateHash Hash of the state the transaction spends.
@@ -126,7 +101,7 @@ export class TransferTransaction implements ITransaction {
    * @returns {TransferTransaction} Decoded transaction.
    * @throws {CborError} On wrong tag or unsupported version.
    */
-  public static fromCBORWithSource(
+  public static fromCBOR(
     bytes: Uint8Array,
     sourceStateHash: DataHash,
     lockScript: EncodedPredicate,

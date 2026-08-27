@@ -193,7 +193,7 @@ describe('WorkerTokenVerifier', () => {
     // The deadline the worker verifies against comes out of element 0, the transfer bytes.
     const certified = CborDeserializer.decodeArray(elements[0], 2);
     expect(
-      TransferTransaction.fromCBORWithSource(
+      TransferTransaction.fromCBOR(
         certified[0],
         deadlineToken.transactions[0].sourceStateHash,
         deadlineToken.transactions[0].lockScript,

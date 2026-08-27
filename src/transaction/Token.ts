@@ -97,12 +97,21 @@ export class Token {
     const transactionsBytes = CborDeserializer.decodeArray(data[2]);
     const genesis = await CertifiedMintTransaction.fromCBOR(data[1]);
     const transactions: CertifiedTransferTransaction[] = [];
-    const token = new Token(genesis, transactions);
+    // Each transfer spends the state the previous one produced. Deriving that here, rather than
+    // handing the decoder a half-built token to read it back off, is what makes the chain
+    // explicit — and lets a Token be constructed once, from a finished list.
+    let previous: ITransaction = genesis;
     for (const transaction of transactionsBytes) {
-      transactions.push(await CertifiedTransferTransaction.fromCBOR(transaction, token));
+      const decoded = CertifiedTransferTransaction.fromCBOR(
+        transaction,
+        await previous.calculateStateHash(),
+        previous.recipient,
+      );
+      transactions.push(decoded);
+      previous = decoded;
     }
 
-    return token;
+    return new Token(genesis, transactions);
   }
 
   /**

@@ -1,6 +1,5 @@
 import { ITransaction } from './ITransaction.js';
 import { StateMask } from './StateMask.js';
-import { Token } from './Token.js';
 import { TransferTransaction } from './TransferTransaction.js';
 import { RootTrustBase } from '../api/bft/RootTrustBase.js';
 import { UnicityCertificateVerifier } from '../api/bft/verification/UnicityCertificateVerifier.js';
@@ -86,10 +85,15 @@ export class CertifiedTransferTransaction implements ITransaction {
    * Create CertifiedTransferTransaction from CBOR bytes.
    *
    * @param {Uint8Array} bytes CBOR bytes.
-   * @param {Token} token Token providing context for the transfer transaction.
-   * @returns {Promise<CertifiedTransferTransaction>} Decoded certified transaction.
+   * @param {DataHash} sourceStateHash Hash of the state the transfer spends.
+   * @param {EncodedPredicate} lockScript Lock script the transfer unlocks.
+   * @returns {CertifiedTransferTransaction} Decoded certified transaction.
    */
-  public static async fromCBOR(bytes: Uint8Array, token: Token): Promise<CertifiedTransferTransaction> {
+  public static fromCBOR(
+    bytes: Uint8Array,
+    sourceStateHash: DataHash,
+    lockScript: EncodedPredicate,
+  ): CertifiedTransferTransaction {
     const data = CborDeserializer.decodeArray(bytes, 2);
     const proof = InclusionProof.fromCBOR(data[1]);
     // A certified transaction is one bound to a leaf. A proof that reports no
@@ -98,7 +102,7 @@ export class CertifiedTransferTransaction implements ITransaction {
     if (proof.referenceTime == null) {
       throw new CborError('Certified transfer transaction carries an inclusion proof with no certified leaf.');
     }
-    return new CertifiedTransferTransaction(await TransferTransaction.fromCBOR(data[0], token), proof);
+    return new CertifiedTransferTransaction(TransferTransaction.fromCBOR(data[0], sourceStateHash, lockScript), proof);
   }
 
   /**

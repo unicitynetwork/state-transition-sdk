@@ -154,7 +154,7 @@ class WorkerTransferTransaction {
     const lockScript = EncodedPredicate.fromCBOR(data[2]);
 
     return new WorkerTransferTransaction(
-      TransferTransaction.fromCBORWithSource(certified[0], sourceStateHash, lockScript),
+      TransferTransaction.fromCBOR(certified[0], sourceStateHash, lockScript),
       sourceStateHash,
       lockScript,
       InclusionProof.fromCBOR(certified[1]),
