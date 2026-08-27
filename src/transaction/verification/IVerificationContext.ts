@@ -18,3 +18,15 @@ export interface IVerificationContext {
   readonly trustBase: RootTrustBase;
   readonly unicityCertificateVerifier: UnicityCertificateVerifier;
 }
+
+/**
+ * The part of the context a rule needs to verify one transaction in isolation.
+ *
+ * A rule that verifies a single transaction has no use for the mint-justification or
+ * token-issuance registries, and asking for them would oblige a caller that has no token — the
+ * worker verifying one transfer, for instance — to invent them.
+ */
+export type ITransactionVerificationContext = Pick<
+  IVerificationContext,
+  'predicateVerifier' | 'trustBase' | 'unicityCertificateVerifier'
+>;

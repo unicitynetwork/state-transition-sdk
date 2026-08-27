@@ -2,7 +2,7 @@ import { InclusionProofVerificationRule, InclusionProofVerificationStatus } from
 import { VerificationResult } from '../../../verification/VerificationResult.js';
 import { VerificationStatus } from '../../../verification/VerificationStatus.js';
 import { CertifiedTransferTransaction } from '../../CertifiedTransferTransaction.js';
-import { IVerificationContext } from '../IVerificationContext.js';
+import { ITransactionVerificationContext } from '../IVerificationContext.js';
 
 /**
  * Transfer transaction verification rule.
@@ -12,12 +12,12 @@ export class CertifiedTransferTransactionVerificationRule {
    * Verify a certified transfer transaction.
    *
    * @param {CertifiedTransferTransaction} transaction Transfer transaction to verify.
-   * @param {IVerificationContext} verificationContext Shared verification context (trust base + registries).
+   * @param {ITransactionVerificationContext} verificationContext Shared verification context (trust base + registries).
    * @returns {Promise<VerificationResult<VerificationStatus>>} Verification outcome.
    */
   public static async verify(
     transaction: CertifiedTransferTransaction,
-    verificationContext: IVerificationContext,
+    verificationContext: ITransactionVerificationContext,
   ): Promise<VerificationResult<VerificationStatus>> {
     const results: VerificationResult<unknown>[] = [];
     const result: VerificationResult<unknown> = await InclusionProofVerificationRule.verify(

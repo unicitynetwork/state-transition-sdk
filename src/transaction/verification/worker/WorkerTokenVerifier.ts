@@ -1,10 +1,8 @@
-import { TransferTransaction } from '../../TransferTransaction.js';
 import { ITokenVerifier } from '../ITokenVerifier.js';
 import { IVerificationContext } from '../IVerificationContext.js';
 import { IWorker } from './IWorker.js';
 import { RootTrustBase } from '../../../api/bft/RootTrustBase.js';
 import { UnicityCertificateVerifier } from '../../../api/bft/verification/UnicityCertificateVerifier.js';
-import { InclusionProof } from '../../../api/InclusionProof.js';
 import { DataHash } from '../../../crypto/hash/DataHash.js';
 import { EncodedPredicate } from '../../../predicate/EncodedPredicate.js';
 import { PredicateVerifierService } from '../../../predicate/verification/PredicateVerifierService.js';
@@ -12,16 +10,13 @@ import { CborDeserializer } from '../../../serialization/cbor/CborDeserializer.j
 import { CborSerializer } from '../../../serialization/cbor/CborSerializer.js';
 import { VerificationResult } from '../../../verification/VerificationResult.js';
 import { VerificationStatus } from '../../../verification/VerificationStatus.js';
-import type { CertifiedTransferTransaction } from '../../CertifiedTransferTransaction.js';
+import { CertifiedTransferTransaction } from '../../CertifiedTransferTransaction.js';
 import type { Token } from '../../Token.js';
 import { CertifiedMintTransactionVerificationRule } from '../rule/CertifiedMintTransactionVerificationRule.js';
-import {
-  InclusionProofVerificationRule,
-  InclusionProofVerificationStatus,
-} from '../rule/InclusionProofVerificationRule.js';
+import { CertifiedTransferTransactionVerificationRule } from '../rule/CertifiedTransferTransactionVerificationRule.js';
 
 /**
- * A single transfer encoded self-contained (see {@link WorkerTransferTransaction}) and its
+ * A single transfer encoded self-contained (see {@link encodeSelfContained}) and its
  * index in the token.
  */
 export interface IEncodedTransferTransaction {
@@ -127,101 +122,37 @@ function toValidatedBatchResults(
 }
 
 /**
- * One certified transfer in the worker wire format: the original transfer CBOR together
- * with its inclusion proof and the chain-derived source state hash and lock script,
- * decodable and verifiable without the rest of the token.
+ * Encode a certified transfer so a worker can decode it without the rest of the token.
  *
- * Private to this module — an internal wire format, not part of the public API.
+ * The transfer's own CBOR says nothing about the state it spends or the lock script over it —
+ * that is chain context — so those travel with it. Everything else the worker needs is already
+ * inside the certified transaction.
+ *
+ * @param {CertifiedTransferTransaction} transaction Transfer to encode.
+ * @returns {Uint8Array} Self-contained CBOR.
  */
-class WorkerTransferTransaction {
-  private constructor(
-    private readonly transaction: TransferTransaction,
-    public readonly sourceStateHash: DataHash,
-    public readonly lockScript: EncodedPredicate,
-    public readonly inclusionProof: InclusionProof,
-  ) {}
+function encodeSelfContained(transaction: CertifiedTransferTransaction): Uint8Array {
+  return CborSerializer.encodeArray(
+    transaction.toCBOR(),
+    CborSerializer.encodeByteString(transaction.sourceStateHash.imprint),
+    transaction.lockScript.toCBOR(),
+  );
+}
 
-  /**
-   * Decode a self-contained transfer produced by {@link WorkerTransferTransaction.toCBOR}.
-   *
-   * @param {Uint8Array} bytes Self-contained CBOR.
-   * @returns {WorkerTransferTransaction} Decoded transfer.
-   */
-  public static fromCBOR(bytes: Uint8Array): WorkerTransferTransaction {
-    const data = CborDeserializer.decodeArray(bytes, 3);
-    const certified = CborDeserializer.decodeArray(data[0], 2);
-    const sourceStateHash = DataHash.fromImprint(CborDeserializer.decodeByteString(data[1]));
-    const lockScript = EncodedPredicate.fromCBOR(data[2]);
+/**
+ * Decode what {@link encodeSelfContained} produced.
+ *
+ * @param {Uint8Array} bytes Self-contained CBOR.
+ * @returns {CertifiedTransferTransaction} Decoded transfer.
+ */
+function decodeSelfContained(bytes: Uint8Array): CertifiedTransferTransaction {
+  const data = CborDeserializer.decodeArray(bytes, 3);
 
-    return new WorkerTransferTransaction(
-      TransferTransaction.fromCBOR(certified[0], sourceStateHash, lockScript),
-      sourceStateHash,
-      lockScript,
-      InclusionProof.fromCBOR(certified[1]),
-    );
-  }
-
-  /**
-   * Convert a certified transfer to self-contained CBOR: its own CBOR plus the derived
-   * source state hash and lock script.
-   *
-   * @param {CertifiedTransferTransaction} transaction Transfer to convert.
-   * @returns {Uint8Array} Self-contained CBOR for {@link WorkerTransferTransaction.fromCBOR}.
-   */
-  public static toCBOR(transaction: CertifiedTransferTransaction): Uint8Array {
-    return CborSerializer.encodeArray(
-      transaction.toCBOR(),
-      CborSerializer.encodeByteString(transaction.sourceStateHash.imprint),
-      transaction.lockScript.toCBOR(),
-    );
-  }
-
-  /**
-   * Compute the canonical hash of this transaction: the hash of the original transfer bytes.
-   *
-   * @returns {Promise<DataHash>} Transaction hash.
-   */
-  public calculateTransactionHash(): Promise<DataHash> {
-    return this.transaction.calculateTransactionHash();
-  }
-
-  /**
-   * Verify this transfer's inclusion proof.
-   *
-   * @param {RootTrustBase} trustBase Root trust base.
-   * @param {PredicateVerifierService} predicateVerifier Predicate verifier.
-   * @param {UnicityCertificateVerifier} unicityCertificateVerifier Unicity certificate verifier.
-   * @returns {Promise<VerificationResult<VerificationStatus>>} Verification outcome.
-   */
-  public async verify(
-    trustBase: RootTrustBase,
-    predicateVerifier: PredicateVerifierService,
-    unicityCertificateVerifier: UnicityCertificateVerifier,
-  ): Promise<VerificationResult<VerificationStatus>> {
-    const results: VerificationResult<unknown>[] = [];
-    const result = await InclusionProofVerificationRule.verify(
-      trustBase,
-      predicateVerifier,
-      unicityCertificateVerifier,
-      this.inclusionProof,
-      await this.calculateTransactionHash(),
-      this.transaction.expiresAt,
-      this.lockScript,
-      this.sourceStateHash,
-    );
-    results.push(result);
-
-    if (result.status !== InclusionProofVerificationStatus.OK) {
-      return new VerificationResult(
-        'CertifiedTransferTransactionVerificationRule',
-        VerificationStatus.FAIL,
-        `Inclusion proof verification failed: ${result.status?.toString()}`,
-        results,
-      );
-    }
-
-    return new VerificationResult('CertifiedTransferTransactionVerificationRule', VerificationStatus.OK, '', results);
-  }
+  return CertifiedTransferTransaction.fromCBOR(
+    data[0],
+    DataHash.fromImprint(CborDeserializer.decodeByteString(data[1])),
+    EncodedPredicate.fromCBOR(data[2]),
+  );
 }
 
 /**
@@ -266,8 +197,12 @@ export abstract class TransferTransactionVerifier {
 
       const results: ITransferTransactionVerificationResult[] = [];
       for (const transfer of request.transfers) {
-        const transaction = WorkerTransferTransaction.fromCBOR(transfer.bytes);
-        const result = await transaction.verify(trustBase, this.predicateVerifier, this.unicityCertificateVerifier);
+        const transaction = decodeSelfContained(transfer.bytes);
+        const result = await CertifiedTransferTransactionVerificationRule.verify(transaction, {
+          predicateVerifier: this.predicateVerifier,
+          trustBase,
+          unicityCertificateVerifier: this.unicityCertificateVerifier,
+        });
         results.push({ index: transfer.index, message: result.message, status: result.status });
       }
 
@@ -446,7 +381,7 @@ export abstract class WorkerTokenVerifier implements ITokenVerifier {
             this.pool
               .run({
                 transfers: indices.map((index) => ({
-                  bytes: WorkerTransferTransaction.toCBOR(transactions[index]),
+                  bytes: encodeSelfContained(transactions[index]),
                   index,
                 })),
                 trustBase: trustBaseJson,
