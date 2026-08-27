@@ -1,21 +1,19 @@
 import { TestAggregatorClient } from './TestAggregatorClient.js';
 import { InclusionProof } from '../../src/api/InclusionProof.js';
+import { InclusionProofResponse } from '../../src/api/InclusionProofResponse.js';
 import { SigningService } from '../../src/crypto/secp256k1/SigningService.js';
 import { SignaturePredicate } from '../../src/predicate/builtin/SignaturePredicate.js';
 import { PredicateVerifierService } from '../../src/predicate/verification/PredicateVerifierService.js';
 import { CborDeserializer } from '../../src/serialization/cbor/CborDeserializer.js';
 import { CborSerializer } from '../../src/serialization/cbor/CborSerializer.js';
 import { StateTransitionClient } from '../../src/StateTransitionClient.js';
-import { CertifiedMintTransaction } from '../../src/transaction/CertifiedMintTransaction.js';
 import { MintTransaction } from '../../src/transaction/MintTransaction.js';
 import { Token } from '../../src/transaction/Token.js';
 import { TransferTransaction } from '../../src/transaction/TransferTransaction.js';
 import { IVerificationContext } from '../../src/transaction/verification/IVerificationContext.js';
 import { MintJustificationVerifierService } from '../../src/transaction/verification/MintJustificationVerifierService.js';
-import { InclusionProofVerificationStatus } from '../../src/transaction/verification/rule/InclusionProofVerificationRule.js';
 import { TokenIssuanceVerifierService } from '../../src/transaction/verification/TokenIssuanceVerifierService.js';
 import { VerificationContext } from '../../src/transaction/verification/VerificationContext.js';
-import { VerificationError } from '../../src/verification/VerificationError.js';
 import { expiresAt } from '../utils/ExpiresAt.js';
 import { mintToken, transferToken } from '../utils/TokenUtils.js';
 import { createUnicityCertificateVerifier } from '../utils/UnicityCertificateVerifierFixture.js';
@@ -81,43 +79,18 @@ describe('Certified transaction wire format', () => {
     await expect(round.verify(context).then((result) => result.status)).resolves.toEqual('OK');
   }, 30000);
 
-  // Nothing certifies a transaction if the proof reports no leaf, and decoding
-  // one into a certified transaction would hand every later verifier a
-  // transaction with no reference time at all.
-  it('refuses to decode a certified transaction whose proof has no leaf', async () => {
-    const pending = new InclusionProof(null, null, null, token.genesis.inclusionProof.unicityCertificate);
-    const bytes = CborSerializer.encodeArray(CborDeserializer.decodeArray(token.genesis.toCBOR())[0], pending.toCBOR());
+  // A certified transaction can no longer be handed a proof that describes no leaf: the type
+  // cannot express one. The absence lives on the response instead, and InclusionProof refuses it.
+  it('cannot represent a certified transaction whose proof has no leaf', () => {
+    const uncertified = new InclusionProofResponse(1n, null, token.genesis.inclusionProof.unicityCertificate);
 
-    await expect(CertifiedMintTransaction.fromCBOR(bytes)).rejects.toThrow(
-      'Certified mint transaction carries an inclusion proof with no certified leaf.',
+    expect(uncertified.inclusionProof).toBeNull();
+    expect(() => InclusionProof.fromCBOR(CborDeserializer.decodeArray(uncertified.toCBOR(), 2)[1])).toThrow(
+      'Expected a certified leaf, but the inclusion proof reports none.',
     );
+    // ...and it survives the round trip as an absence rather than becoming a half-formed proof.
+    expect(InclusionProofResponse.fromCBOR(uncertified.toCBOR()).inclusionProof).toBeNull();
   });
-
-  // Binding a transaction to a proof for a state the aggregator has not
-  // certified yet is the ordinary "not ready" case, and callers branch on that
-  // status to retry. A guard in this factory used to intercept it and report a
-  // missing reference time instead, which no retry path recognises.
-  it('reports a pending state as a missing certificate, not a missing reference time', async () => {
-    const pending = new InclusionProof(null, null, null, token.genesis.inclusionProof.unicityCertificate);
-    const uncertified = await MintTransaction.create(trustBase.networkId, SignaturePredicate.create(alice.publicKey), {
-      expiresAt: expiresAt(),
-    });
-
-    const rejection = await CertifiedMintTransaction.fromTransaction(
-      trustBase,
-      PredicateVerifierService.create(),
-      createUnicityCertificateVerifier(),
-      uncertified,
-      pending,
-    ).then(
-      () => null,
-      (error: VerificationError) => error,
-    );
-
-    expect(rejection?.verificationResult.status).toEqual(
-      InclusionProofVerificationStatus.INCLUSION_CERTIFICATE_MISSING,
-    );
-  }, 30000);
 
   // Every structure the token embeds changed shape in this release. Without the
   // bump a token written by an older SDK passes the version check and then dies

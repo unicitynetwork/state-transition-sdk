@@ -3,7 +3,11 @@ import { UnicityCertificate } from '../../../src/api/bft/UnicityCertificate.js';
 import { UnicityCertificateVerifier } from '../../../src/api/bft/verification/UnicityCertificateVerifier.js';
 import { CertificationData } from '../../../src/api/CertificationData.js';
 import { InclusionCertificate } from '../../../src/api/InclusionCertificate.js';
-import { InclusionProof } from '../../../src/api/InclusionProof.js';
+import {
+  decodeInclusionProofOrAbsence,
+  encodeNoCertifiedLeaf,
+  InclusionProof,
+} from '../../../src/api/InclusionProof.js';
 import { calculateLeafValue } from '../../../src/api/LeafValue.js';
 import { NetworkId } from '../../../src/api/NetworkId.js';
 import { StateId } from '../../../src/api/StateId.js';
@@ -15,6 +19,7 @@ import { SigningService } from '../../../src/crypto/secp256k1/SigningService.js'
 import { SignaturePredicate } from '../../../src/predicate/builtin/SignaturePredicate.js';
 import { EncodedPredicate } from '../../../src/predicate/EncodedPredicate.js';
 import { PredicateVerifierService } from '../../../src/predicate/verification/PredicateVerifierService.js';
+import { CborDeserializer } from '../../../src/serialization/cbor/CborDeserializer.js';
 import { CborSerializer } from '../../../src/serialization/cbor/CborSerializer.js';
 import { SparseMerkleTree } from '../../../src/smt/radix/SparseMerkleTree.js';
 import { MintTransaction } from '../../../src/transaction/MintTransaction.js';
@@ -73,88 +78,49 @@ describe('InclusionProof', () => {
     );
 
     expect(InclusionProof.fromCBOR(inclusionProof.toCBOR())).toStrictEqual(inclusionProof);
+  });
 
-    expect(InclusionProof.fromCBOR(new InclusionProof(null, null, null, unicityCertificate).toCBOR())).toStrictEqual(
-      new InclusionProof(null, null, null, unicityCertificate),
+  // The wire form also expresses "no leaf yet". That is not an InclusionProof — the response is
+  // the type that carries it, and asking for a proof anyway is an error rather than a null.
+  it('decodes the absent form as an absence, not as a proof', () => {
+    const encoded = encodeNoCertifiedLeaf(unicityCertificate);
+
+    expect(decodeInclusionProofOrAbsence(encoded).inclusionProof).toBeNull();
+    expect(() => InclusionProof.fromCBOR(encoded)).toThrow(
+      'Expected a certified leaf, but the inclusion proof reports none.',
     );
   });
 
-  // A proof either establishes a leaf or reports that there is none yet. The
-  // aggregators emit all three leaf fields together or none of them, so a
-  // partially present proof is a protocol violation and is rejected at decode
-  // rather than surfacing as a null somewhere downstream.
-  it('rejects a partially present proof', () => {
+  // All three leaf fields travel together. A partial combination is a protocol violation, and it
+  // is rejected at the wire boundary so nothing downstream can hold a half-formed proof — which
+  // is now also unrepresentable, since InclusionProof requires all three.
+  it('rejects a partially present proof at the wire boundary', () => {
+    const complete = CborDeserializer.decodeArray(
+      CborDeserializer.decodeTag(
+        new InclusionProof(certificationData, REFERENCE_TIME, inclusionCertificate, unicityCertificate).toCBOR(),
+      ).data,
+      5,
+    );
+    const nul = CborSerializer.encodeNull();
+
+    // Each combination that drops some of the three but not all of them.
     const partial = [
-      new InclusionProof(certificationData, REFERENCE_TIME, null, unicityCertificate),
-      new InclusionProof(certificationData, null, inclusionCertificate, unicityCertificate),
-      new InclusionProof(null, REFERENCE_TIME, inclusionCertificate, unicityCertificate),
-      new InclusionProof(null, null, inclusionCertificate, unicityCertificate),
+      [complete[1], complete[2], nul],
+      [complete[1], nul, complete[3]],
+      [nul, complete[2], complete[3]],
+      [nul, nul, complete[3]],
     ];
 
-    for (const proof of partial) {
-      expect(() => InclusionProof.fromCBOR(proof.toCBOR())).toThrow(
+    for (const [data, referenceTime, certificate] of partial) {
+      const encoded = CborSerializer.encodeTag(
+        InclusionProof.CBOR_TAG,
+        CborSerializer.encodeArray(complete[0], data, referenceTime, certificate, complete[4]),
+      );
+
+      expect(() => decodeInclusionProofOrAbsence(encoded)).toThrow(
         'InclusionProof must carry certification data, reference time and inclusion certificate together, or none of them.',
       );
     }
-  });
-
-  it('verifies', async () => {
-    const transactionHash = await transaction.calculateTransactionHash();
-    await expect(
-      InclusionProofVerificationRule.verify(
-        trustBase,
-        predicateVerifier,
-        unicityCertificateVerifier,
-        new InclusionProof(certificationData, REFERENCE_TIME, inclusionCertificate, unicityCertificate),
-        transactionHash,
-        transaction.expiresAt,
-        transaction.lockScript,
-        transaction.sourceStateHash,
-      ).then((result) => result.status),
-    ).resolves.toEqual(InclusionProofVerificationStatus.OK);
-
-    // What the aggregator returns for a state it has not certified yet: all
-    // three leaf fields absent together. The one status a caller polls through.
-    await expect(
-      InclusionProofVerificationRule.verify(
-        trustBase,
-        predicateVerifier,
-        unicityCertificateVerifier,
-        new InclusionProof(null, null, null, unicityCertificate),
-        transactionHash,
-        transaction.expiresAt,
-        transaction.lockScript,
-        transaction.sourceStateHash,
-      ).then((result) => result.status),
-    ).resolves.toEqual(InclusionProofVerificationStatus.INCLUSION_CERTIFICATE_MISSING);
-  });
-
-  // A proof with some leaf fields but not others establishes neither a leaf nor
-  // its absence. fromCBOR rejects one off the wire, so these are reachable only
-  // hand-built, and each has to name what is missing rather than pass for
-  // "not certified yet" and leave the caller polling to its own deadline.
-  it.each([
-    [null, REFERENCE_TIME, true, InclusionProofVerificationStatus.MISSING_CERTIFICATION_DATA],
-    [true, null, true, InclusionProofVerificationStatus.MISSING_REFERENCE_TIME],
-    [true, REFERENCE_TIME, false, InclusionProofVerificationStatus.INCOMPLETE_INCLUSION_PROOF],
-  ])('reports what a partially present proof is missing', async (hasData, referenceTime, hasCertificate, status) => {
-    await expect(
-      InclusionProofVerificationRule.verify(
-        trustBase,
-        predicateVerifier,
-        unicityCertificateVerifier,
-        new InclusionProof(
-          hasData ? certificationData : null,
-          referenceTime,
-          hasCertificate ? inclusionCertificate : null,
-          unicityCertificate,
-        ),
-        await transaction.calculateTransactionHash(),
-        transaction.expiresAt,
-        transaction.lockScript,
-        transaction.sourceStateHash,
-      ).then((result) => result.status),
-    ).resolves.toEqual(status);
   });
 
   it('verification fails with invalid transaction hash', async () => {

@@ -99,7 +99,7 @@ describe('Integration request deadline', () => {
       // Admission is what the deadline governs, and it is exclusive: the leaf
       // could only be created in a round strictly before it.
       expect(proof.referenceTime).not.toBeNull();
-      expect(proof.referenceTime! < deadline).toBe(true);
+      expect(proof.referenceTime < deadline).toBe(true);
 
       // The whole certified transaction verifies, which re-derives the leaf
       // value from this reference time and checks the SMT path against it.
@@ -131,7 +131,7 @@ describe('Integration request deadline', () => {
       // created, so it does not stop a dishonest service back-dating one.
       const backDated = new InclusionProof(
         proof.certificationData,
-        proof.referenceTime! + 1n,
+        proof.referenceTime + 1n,
         proof.inclusionCertificate,
         proof.unicityCertificate,
       );
@@ -157,10 +157,18 @@ describe('Integration request deadline', () => {
       // rounds are shorter than that, so a later round can still report the same
       // second.
       const waitUntil = Date.now() + 30000;
-      let refetched = (await aggregatorClient.getInclusionProof(stateId)).inclusionProof;
+      const refetch = async (): Promise<InclusionProof> => {
+        const { inclusionProof } = await aggregatorClient.getInclusionProof(stateId);
+        if (inclusionProof == null) {
+          throw new Error('a certified state stopped reporting its leaf');
+        }
+
+        return inclusionProof;
+      };
+      let refetched = await refetch();
       while (refetched.unicityCertificate.inputRecord.timestamp <= certifiedRoundTime && Date.now() < waitUntil) {
         await new Promise((resolve) => setTimeout(resolve, 1000));
-        refetched = (await aggregatorClient.getInclusionProof(stateId)).inclusionProof;
+        refetched = await refetch();
       }
       expect(refetched.unicityCertificate.inputRecord.roundNumber).toBeGreaterThan(certifiedRound);
       expect(refetched.unicityCertificate.inputRecord.timestamp).toBeGreaterThan(certifiedRoundTime);
@@ -185,11 +193,8 @@ describe('Integration request deadline', () => {
 
       const { inclusionProof } = await client.getInclusionProof(stateId);
 
-      // Nothing was certified, so the three leaf fields are absent together —
-      // the invariant InclusionProof.fromCBOR enforces on decode.
-      expect(inclusionProof.certificationData).toBeNull();
-      expect(inclusionProof.referenceTime).toBeNull();
-      expect(inclusionProof.inclusionCertificate).toBeNull();
+      // Nothing was certified, and the response is the type that says so.
+      expect(inclusionProof).toBeNull();
     }, 30000);
   });
 });
